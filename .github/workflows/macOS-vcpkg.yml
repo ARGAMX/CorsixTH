@@ -1,0 +1,81 @@
+---
+name: macOS vcpkg
+
+on:
+  push:
+    branches-ignore:
+      - 'gh-pages'
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Arch?'
+        type: choice
+        options:
+        - 'Apple Silicon'
+        - 'Intel'
+        default: 'Apple Silicon'
+      pr:
+        description: 'Build this PR'
+        type: string
+
+jobs:
+  macOS-vcpkg:
+    runs-on: macos-15 # arm
+    name: macOS ${{inputs.arch || 'Apple Silicon'}} (ad-hoc signed)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Define job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{inputs.pr}}" -gt 0 ]]; then
+            gh pr checkout --repo CorsixTH/CorsixTH ${{inputs.pr}}
+          fi
+          if [ "${{inputs.arch}}" == "Intel" ]; then
+            echo "TRIPLET=macos-x64-rel" >> $GITHUB_ENV
+          else
+            echo "TRIPLET=macos-arm64-rel" >> $GITHUB_ENV
+          fi
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install nasm
+
+      - uses: lukka/get-cmake@v3.28.3
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '5f4628b89f3f98cd9a0b43c27ded2aa53da1f790'
+
+      - name: Run CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: '${{env.TRIPLET}}'
+          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=/Applications']"
+          buildPreset: '${{env.TRIPLET}}'
+          buildPresetAdditionalArgs: "['--target install']"
+          testPreset: '${{env.TRIPLET}}'
+
+      - name: Sign and test CorsixTH
+        run: |
+          # Ad-hoc sign
+          codesign --deep --timestamp --sign - /Applications/CorsixTH.app/
+          codesign -dvvvv /Applications/CorsixTH.app/
+          /Applications/CorsixTH.app/Contents/MacOS/CorsixTH > test & sleep 2; kill $!
+          grep -e "Welcome to CorsixTH" test
+
+      - name: Create build artifact
+        shell: bash
+        run: |
+          repo=$(echo $GITHUB_REPOSITORY-$GITHUB_REF | sed -e 's/\//-/g' -e 's/refs-heads-//')
+          build="${{env.arch}}$(if [ ${{ inputs.animview }} ]; then echo "+animview"; fi)"
+          name="CTH-$(date +'%Y-%m-%d-%H-%M-%S')-$build-$repo-${GITHUB_SHA:0:7}"
+          echo "NAME=$name" >> $GITHUB_ENV
+          cd /Applications/
+          zip $GITHUB_WORKSPACE/$name --symlinks --recurse-paths CorsixTH.app/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: 'CTH*'
+          name: ${{ env.NAME }}
+        continue-on-error: true
