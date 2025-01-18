@@ -37,6 +37,10 @@ jobs:
           else
             echo "TRIPLET=macos-arm64-rel" >> $GITHUB_ENV
           fi
+          target="11.3" # macOS Big Sur
+          echo "MACOSX_DEPLOYMENT_TARGET=$target" >> $GITHUB_ENV
+          echo "CFLAGS=-O2 -pipe -mmacos-version-min=$target" >> $GITHUB_ENV
+          echo "CXXFLAGS=-O2 -pipe -mmacos-version-min=$target" >> $GITHUB_ENV
           HOMEBREW_NO_AUTO_UPDATE=1 brew install nasm
 
       - uses: lukka/get-cmake@v3.28.3
