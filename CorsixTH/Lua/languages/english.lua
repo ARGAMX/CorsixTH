@@ -269,6 +269,8 @@ adviser = {
     high_prices = "Your charges for %s are high. This will make big profits in the short-term, but ultimately you'll start to drive people away.",
     fair_prices = "Your charges for %s seem fair and balanced.",
     patient_not_paying = "A patient left without paying for %s because it's too expensive!",
+    no_doctor_no_gp_office = "You should build a GP's Office and hire a doctor at some point!",
+    no_gp_office = "You haven't built a GP's Office where your doctors can diagnose the patients!",
   },
   cheats = {
     th_cheat = "Congratulations, you have unlocked cheats!",
@@ -394,11 +396,13 @@ tooltip.custom_game_window = {
 custom_campaign_window = {
   caption = "Custom Campaign",
   start_selected_campaign = "Start campaign",
+  duplicates_warning = "%d campaign(s) with duplicate names have been hidden",
 }
 
 tooltip.custom_campaign_window = {
   choose_campaign = "Choose a campaign to read more about it",
   start_selected_campaign = "Load the first level of this campaign",
+  duplicates_warning = "See the console window for specific errors",
 }
 
 save_game_window = {

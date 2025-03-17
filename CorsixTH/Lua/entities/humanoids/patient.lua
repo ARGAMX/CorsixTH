@@ -44,7 +44,9 @@ function Patient:Patient(...)
   self.vaccinated = false
   -- Has the patient been sent to the wrong room and needs redirecting
   self.needs_redirecting = false
-  self.attempted_to_infect= false
+  -- Indicates is currently some infected patient trying to infect this patient
+  -- Prevents the situation when several infectors trying to infect the same victim
+  self.under_infection_attempt = false
   -- Is the patient about to be vaccinated?
   self.vaccination_candidate = false
   -- Has the patient passed reception?
@@ -383,7 +385,7 @@ function Patient:falling(player_init)
     self:queueAction(FallingAction(), 1)
     self:queueAction(OnGroundAction(), 2)
     self:queueAction(GetUpAction(), 3)
-    -- show the patient is annoyed, if possbile
+    -- show the patient is annoyed, if possible
     if math.random(1, 5) == 3 and self.shake_fist_anim then
       self:queueAction(ShakeFistAction(), 4)
       self:interruptAndRequeueAction(current, 5)
@@ -582,9 +584,9 @@ function Patient:tickDay()
 
   -- if patients are getting unhappy, then maybe we should see this!
   if self:getAttribute("happiness") < 0.3 then
-    self:setMood("sad7", "activate")
+    self:setMood("sad2", "activate")
   else
-    self:setMood("sad7", "deactivate")
+    self:setMood("sad2", "deactivate")
   end
   -- Now call the parent function - it checks
   -- if we're outside the hospital or on our way home.
@@ -601,38 +603,38 @@ function Patient:tickDay()
   -- TODO clean up this block, nonmagical numbers
   local health = self:getAttribute("health")
   if health >= 0.18 and health < 0.22 then
-    self:setMood("sad2", "activate")
+    self:setMood("dying1", "activate")
     self:changeAttribute("happiness", -0.0002) -- waiting too long will make you sad
     -- There is a 1/3 chance that the patient will get fed up and leave.
     -- This is potentially run 10 ((0.22-0.18)/0.004) times, hence the 1/30 chance.
     -- If patient is already in the cure room, let the treatment happen.
     if not self:_checkIfCureRoom(self:getRoom()) and math.random(1,30) == 1 then
       self:setDynamicInfoText(_S.dynamic_info.patient.actions.fed_up)
-      self:setMood("sad2", "deactivate")
+      self:setMood("dying1", "deactivate")
       self:goHome("kicked")
     end
   elseif health >= 0.14 and health < 0.18 then
-    self:setMood("sad2", "deactivate")
-    self:setMood("sad3", "activate")
+    self:setMood("dying1", "deactivate")
+    self:setMood("dying2", "activate")
   -- now wishes they had gone to that other hospital
   elseif health >= 0.10 and health < 0.14 then
-    self:setMood("sad3", "deactivate")
-    self:setMood("sad4", "activate")
+    self:setMood("dying2", "deactivate")
+    self:setMood("dying3", "activate")
   -- starts to take a turn for the worse and is slipping away
   elseif health >= 0.06 and health < 0.10 then
-    self:setMood("sad4", "deactivate")
-    self:setMood("sad5", "activate")
+    self:setMood("dying3", "deactivate")
+    self:setMood("dying4", "activate")
   -- fading fast
   elseif health >= 0.01 and health < 0.06 then
-    self:setMood("sad5", "deactivate")
-    self:setMood("sad6", "activate")
+    self:setMood("dying4", "deactivate")
+    self:setMood("dying5", "activate")
   -- it's not looking good
   elseif health > 0.00 and health < 0.01 then
     self.attributes["health"] = 0.0
   -- is there time to say a prayer
   elseif health == 0.0 then
     if not self:getRoom() and not self:getCurrentAction().is_leaving then
-      self:setMood("sad6", "deactivate")
+      self:setMood("dying5", "deactivate")
       self:die()
     end
     -- Patient died, will die when they leave the room, will be cured, or is leaving
@@ -990,7 +992,7 @@ function Patient:updateDynamicInfo()
   end
   -- Set the centre line of dynamic info based on contagiousness, if appropriate
   local epidemic = self.hospital and self.hospital.epidemic
-  if epidemic and self.infected and epidemic.coverup_in_progress then
+  if epidemic and self.infected and epidemic.coverup_selected then
     if self.vaccinated then
       self:setDynamicInfo('text',
         {action_string, _S.dynamic_info.patient.actions.epidemic_vaccinated, info})
@@ -1059,21 +1061,50 @@ function Patient:updateMessage(choice)
   end
 end
 
---[[ If the patient is not a vaccination candidate then
-  give them the arrow icon and candidate status ]]
+--[[ Show patient infected status ]]
+function Patient:setInfectedStatus()
+  self:removeAnyEpidemicStatus()
+  self:setMood("epidemy4","activate")
+  self.vaccination_candidate = false
+end
+
+--[[ Show patient as ready for vaccination status ]]
+function Patient:setToReadyForVaccinationStatus()
+  self:removeAnyEpidemicStatus()
+  self:setMood("epidemy2","activate")
+  self.marked_for_vaccination = true
+end
+
+--[[ Show patient selected vaccination candidate status ]]
 function Patient:giveVaccinationCandidateStatus()
-  self:setMood("epidemy2","deactivate")
+  self:removeAnyEpidemicStatus()
   self:setMood("epidemy3","activate")
   self.vaccination_candidate = true
 end
 
---[[Remove the vaccination candidate icon and status from the patient]]
+--[[ Remove the vaccination candidate icon and status from the patient ]]
 function Patient:removeVaccinationCandidateStatus()
   if not self.vaccinated then
-    self:setMood("epidemy3","deactivate")
+    self:removeAnyEpidemicStatus()
     self:setMood("epidemy2","activate")
     self.vaccination_candidate = false
   end
+end
+
+--[[ Show vaccinated status for vaccinated patient ]]
+function Patient:setVaccinatedStatus()
+  self:removeAnyEpidemicStatus()
+  self:setMood("epidemy1","activate")
+  self.marked_for_vaccination = false
+  self.vaccinated = true
+end
+
+--[[ Clear all epidemic status ]]
+function Patient:removeAnyEpidemicStatus()
+  self:setMood("epidemy1","deactivate") -- vaccinated (step 4)
+  self:setMood("epidemy2","deactivate") -- marked (step 2)
+  self:setMood("epidemy3","deactivate") -- choosed by nurse (step 3)
+  self:setMood("epidemy4","deactivate") -- infected (step 1)
 end
 
 function Patient:afterLoad(old, new)
@@ -1137,6 +1168,10 @@ function Patient:afterLoad(old, new)
     if self.humanoid_class == "Standard Female Patient" then
       self.on_ground_anim = 1764
     end
+  end
+  if old < 211 then
+    self.under_infection_attempt = self.attempted_to_infect
+    self.attempted_to_infect = nil
   end
   self:updateDynamicInfo()
   Humanoid.afterLoad(self, old, new)

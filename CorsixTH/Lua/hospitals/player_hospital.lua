@@ -106,6 +106,8 @@ function PlayerHospital:dailyAdviceChecks()
   -- Reset advise flags at the end of the month.
   if day == 28 then
     self.adviser_data.temperature_advice = false
+    self.adviser_data.no_gp_office = false
+    self.adviser_data.no_doctor_no_gp_office = false
   end
 end
 
@@ -815,6 +817,23 @@ function PlayerHospital:tickEarthquake(stage)
   end
 end
 
+--! Give advice that a patient is waiting for the player to build a GP's office
+-- Called when a patient has passed reception and is waiting for a room to be built.
+-- Each piece of advice is only given once per month
+function PlayerHospital:adviseNoGPOffice()
+  if self:countStaffOfCategory("Doctor", 1) > 0 then -- Doctor without a room
+    if not self.adviser_data.no_gp_office then
+      self.world.ui.adviser:say(_A.warnings.no_gp_office)
+      self.adviser_data.no_gp_office = true
+    end
+  else -- No room or doctor
+    if not self.adviser_data.no_doctor_no_gp_office then
+      self.world.ui.adviser:say(_A.warnings.no_doctor_no_gp_office)
+      self.adviser_data.no_doctor_no_gp_office = true
+    end
+  end
+end
+
 function PlayerHospital:afterLoad(old, new)
   if old < 146 then
     self.adviser_data = {
@@ -836,6 +855,16 @@ function PlayerHospital:afterLoad(old, new)
   end
   if old < 159 then
     self.adviser_data.reception_advice = self.adviser_data.reception_advice or self.receptionist_msg
+  end
+  if old < 211 then
+    -- Serious Radiation epidemics could exist in old saves and cause a crash
+    local serious_radiation = TheApp.diseases["serious_radiation"]
+    if self.epidemic and self.epidemic.disease == serious_radiation then
+      -- Tell the player somehow we ended the epidemic, EPI0008 is most fitting
+      self.world.ui:playAnnouncement("EPID008.wav", AnnouncementPriority.Critical)
+      self.world:gameLog("Notice: Removing active epidemic for Serious Radiation as it may crash the game due to a bug.")
+    end
+    self:cancelEpidemics(serious_radiation)
   end
 
   -- Refresh the cheat system every load

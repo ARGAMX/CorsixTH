@@ -686,11 +686,11 @@ function Hospital:afterLoad(old, new)
   end
 
   -- Update other objects in the hospital (added in version 106).
-  if self.epidemic then self.epidemic.afterLoad(old, new) end
+  if self.epidemic then self.epidemic:afterLoad(old, new) end
   for _, future_epidemic in ipairs(self.future_epidemics_pool) do
-    future_epidemic.afterLoad(old, new)
+    future_epidemic:afterLoad(old, new)
   end
-  self.research.afterLoad(old, new)
+  self.research:afterLoad(old, new)
 end
 
 --! Count the number of patients in the hospital.
@@ -1250,19 +1250,27 @@ function Hospital:manageEpidemics()
   end
 end
 
---[[ For Cheat - Cancel ongoing and future epidemics. ]]
-function Hospital:cancelEpidemics()
+--! Cancel ongoing and future epidemics.
+--!param disease (table) Optional, if specified only epidemics of a certain disease
+-- will be cancelled.
+function Hospital:cancelEpidemics(disease)
+  local function cancelEpidemic(epidemic)
+    if disease and disease ~= epidemic.disease then return false end
+    epidemic:cancelEpidemic()
+    return true
+  end
   -- Cancel ongoing epidemic
   if self.epidemic ~= nil then
-    self.epidemic:cancelEpidemic()
-    self.epidemic = nil
+    if cancelEpidemic(self.epidemic) then self.epidemic = nil end
   end
   -- Cancel not revealed epidemics
   if self.future_epidemics_pool then
-    for i, future_epidemic in ipairs(self.future_epidemics_pool) do
-      future_epidemic:cancelEpidemic()
+    local future_epidemics = self.future_epidemics_pool
+    for i=#future_epidemics, 1, -1 do
+      if cancelEpidemic(future_epidemics[i]) then
+        table.remove(self.future_epidemics_pool, i)
+      end
     end
-    self.future_epidemics_pool = {}
   end
 end
 
@@ -1302,11 +1310,11 @@ function Hospital:addToEpidemic(patient)
   local epidemic = self.epidemic
   -- Don't add a new contagious patient if the player is trying to cover up
   -- an existing epidemic - not really fair
-  if epidemic and not epidemic.coverup_in_progress and
+  if epidemic and not epidemic.coverup_selected and
       (patient.disease == epidemic.disease) then
     epidemic:addContagiousPatient(patient)
   elseif self.future_epidemics_pool and
-      not (epidemic and epidemic.coverup_in_progress) then
+      not (epidemic and epidemic.coverup_selected) then
     local added = false
     for _, future_epidemic in ipairs(self.future_epidemics_pool) do
       if future_epidemic.disease == patient.disease then
@@ -2525,4 +2533,8 @@ end
 
 --! The UI parts of earthquake ticks
 function Hospital:tickEarthquake(stage)
+end
+
+--! Give advice that a patient is waiting for the player to build a GP's office
+function Hospital:adviseNoGPOffice()
 end
