@@ -416,7 +416,7 @@ function Patient:vomit()
     self:queueAction(VomitAction(), 1)
     self:interruptAndRequeueAction(current, 2)
     self.has_vomitted = self.has_vomitted + 1
-    self:changeAttribute("happiness", -0.02) -- being sick makes you unhappy
+    self:changeAttribute("happiness", -0.02) --vomiting on yourself makes you unhappy >:Oz
   else
     return
   end
@@ -669,17 +669,17 @@ function Patient:tickDay()
   if self.vomit_anim and not self:getRoom() and not self:getCurrentAction().is_leaving and not self:getCurrentAction().is_entering then
     --Nausea level is based on health then proximity to vomit is used as a multiplier.
     --Only a patient with a health value of less than 0.8 can be the initial vomiter, however :)
-    local initialVomitMult = 0.002 --The initial chance of vomiting.
-    local proximityVomitMult = 1.5 --The multiplier used when in proximity to vomit.
-    local nausea = (1.0 - self:getAttribute("health")) * initialVomitMult
+    local initialVomitMult = 0.9 --The initial chance of vomiting.
+    local proximityVomitMult = 1000.0 --The multiplier used when in proximity to vomit.
+    local nausea = (1.0) * initialVomitMult
     local foundVomit = {}
     local numVomit = 0
 
-    self.world:findObjectNear(self, "litter", 2, function(x, y)
+    self.world:findObjectNear(self, "litter", 5, function(x, y)
       local litter = self.world:getObject(x, y, "litter")
-    if not litter then
-    return
-    end
+    -- if not litter then
+    -- return
+    -- end
       if litter:vomitInducing() then
         local alreadyFound = false
         for i=1,numVomit do
@@ -696,19 +696,19 @@ function Patient:tickDay()
       end
       -- seeing litter will make you unhappy. If it is pee or puke it is worse
       if litter:anyLitter() then
-        self:changeAttribute("happiness", -0.0002)
+        self:changeAttribute("happiness", -0.002)
       else
-        self:changeAttribute("happiness", -0.0004)
+        self:changeAttribute("happiness", -0.004)
       end
     end) -- End of findObjectNear
     -- As we don't yet have rats, ratholes and dead rats the chances of vomitting are slim
     -- as a temp fix for this I have added 0.5 to the < nausea equation,
     -- this may want adjusting or removing when the other factors are in the game MarkL
-    if self:getAttribute("health") <= 0.8 or numVomit > 0 or self:getAttribute("happiness") < 0.6 then
+    if self:getAttribute("health") <= 1.0 or self:getAttribute("happiness") <= 1.0 then
       nausea = nausea * ((numVomit+1) * proximityVomitMult)
-      if math.random() < nausea + 0.5 then
+      --if math.random() < nausea + 1.0 then
         self:vomit()
-      end
+      --end
     end
   end
 
@@ -894,7 +894,7 @@ function Patient:setTile(x, y)
       if x and not self:getRoom() and not self.world:getObjects(x, y) and
           self.world.map.th:getCellFlags(x, y).buildable and
           self.hospital:isInHospital(x, y) and
-          (not self.world:findObjectNear(self, "bin", 8) or math.random() < 0.05) then
+          (not self.world:findObjectNear(self, "bin", 8) or math.random() < 1) then
         -- Drop some litter!
         local trash = math.random(1, 4)
         local litter = self.world:newObject("litter", x, y)
