@@ -1270,8 +1270,7 @@ drawable* level_map::hit_test_drawables(link_list* pListStart, int iXs, int iYs,
 }
 
 int level_map::get_tile_owner(const map_tile* pNode) const {
-  uint16_t parcelId = pNode->iParcelId;
-  return get_parcel_owner(parcelId);
+  return plot_owner[pNode->iParcelId];
 }
 
 int level_map::get_parcel_owner(int iParcel) const {
