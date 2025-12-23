@@ -40,6 +40,7 @@ function Audio:Audio(app)
   self.unused_played_callback_id = 0
   self.played_sound_callbacks = {}
   self.entities_waiting_for_sound_to_be_enabled = {}
+  self.midi_player = nil
 end
 
 function Audio:clearCallbacks()
@@ -65,11 +66,7 @@ function Audio:init()
   if self.not_loaded then
     return
   end
-  if not SDL.audio.loaded then
-    print("Notice: Audio system not loaded as CorsixTH compiled without it")
-    self.not_loaded = true
-    return
-  end
+
   local music = self.app.config.audio_music or self.app.config.audio_mp3
   local music_dir
   if music then
@@ -176,20 +173,45 @@ function Audio:init()
     self.has_bg_music = true
   end
 
+  self:initMidiPlayer()
+
   local status, err = SDL.audio.init(
     self.app.config.audio_frequency,
     self.app.config.audio_channels,
     self.app.config.audio_buffer_size,
     self.app:findSoundFont())
-  if status then
-    -- NB: Playback will not start if play_music is set to false
-    self:playRandomBackgroundTrack()
-  else
+  if not status then
     print("Notice: Audio system could not initialise (SDL error: " .. tostring(err) .. ")")
     self.not_loaded = true
     self.has_bg_music = false
     self.background_playlist = {}
     return
+  end
+end
+
+function Audio:initMidiPlayer()
+  if self.midi_player then
+    self.midi_player:close()
+    self.midi_player = nil
+  end
+
+  if TH.GetCompileOptions().midi_device and self.app.config.midi_api then
+    self.midi_player = TH.midiPlayer(
+      self.app.config.midi_api,
+      self.app.config.midi_port,
+      self.app.config.midi_sysex_master_volume)
+  end
+end
+
+function Audio:getMidiApiList()
+  return TH.midiPlayer.getAvailableApis()
+end
+
+function Audio:getMidiPortList()
+  if self.midi_player then
+    return self.midi_player:portList()
+  else
+    return {}
   end
 end
 
@@ -280,7 +302,23 @@ end
 
 local wilcard_cache = permanent "audio_wildcard_cache" {}
 
-function Audio:playSound(name, where, is_announcement, played_callback, played_callback_delay)
+
+--! Play a sound from the sound archive
+--!param name (string) The name of the sound to be played. Can include
+--  wildcards (*).
+--!param where (Entity) The entity that is the source of the sound, or nil if
+--  the audio is not positional.
+--!param is_announcement (boolean) Whether the sound is an announcement
+--  (affects volume).
+--!param played_callback (function) A function to be called when the sound has
+--  finished playing. Can be nil.
+--!param played_callback_delay (integer) An optional delay in milliseconds
+--  before the played_callback is called.
+--!param loops (integer) number of times to play the audio. -1 for infinite.
+--!return (table) A `sound` table for passing into functions that act on the
+--  playing sound. The fields are an implementation detail that should not be
+--  used outside of the Audio class.
+function Audio:playSound(name, where, is_announcement, played_callback, played_callback_delay, loops)
   local sound_fx = self.sound_fx
   if sound_fx then
     if name:find("*") then
@@ -288,14 +326,13 @@ function Audio:playSound(name, where, is_announcement, played_callback, played_c
       local list = self:cacheSoundFilenamesAssociatedWithName(name)
       name = list[1] and list[math.random(1, #list)] or name
     end
-    local _, warning
     local volume = is_announcement and self.app.config.announcement_volume or self.app.config.sound_volume
     local x, y
-    local played_callbacks_id
+    local played_callback_id = nil
     if played_callback then
-      played_callbacks_id = self.unused_played_callback_id
+      played_callback_id = self.unused_played_callback_id
       self.unused_played_callback_id = self.unused_played_callback_id + 1
-      self.played_sound_callbacks[tostring(played_callbacks_id)] = played_callback
+      self.played_sound_callbacks[tostring(played_callback_id)] = played_callback
     end
     if where then
       x, y = Map:WorldToScreen(where.tile_x, where.tile_y)
@@ -304,13 +341,57 @@ function Audio:playSound(name, where, is_announcement, played_callback, played_c
       x = x + dx - ui.screen_offset_x
       y = y + dy - ui.screen_offset_y
     end
-    _, warning = sound_fx:play(name, volume, x, y, played_callbacks_id, played_callback_delay)
+    local handle, warning = sound_fx:play(name, volume, x, y, played_callback_id, played_callback_delay, loops)
 
     if warning then
       -- Indicates something happened
       self.app.world:gameLog("Audio:playSound - Warning: " .. warning)
     end
+
+    return { handle = handle, played_callback_id = played_callback_id }
   end
+end
+
+--! Pause or unpause a playing sound
+--!param sound (table) The `sound` table returned by `Audio:playSound`.
+function Audio:togglePauseSound(sound)
+  local sound_fx = self.sound_fx
+  if not sound_fx then
+    return
+  end
+
+  if sound and sound.handle then
+    sound_fx:togglePause(sound.handle, sound.played_callback_id)
+  end
+end
+
+--! Stop a playing sound.
+-- A stopped sound is destroyed and cannot be resumed. The callback will be not
+-- be called for the stopped sound.
+--!param sound (table) The `sound` table returned by `Audio:playSound`.
+function Audio:stopSound(sound)
+  local sound_fx = self.sound_fx
+  if not sound_fx then
+    return
+  end
+
+  if sound and sound.handle then
+    sound_fx:stop(sound.handle, sound.played_callback_id)
+  end
+end
+
+--! Determine if a given sound is still playing
+--!param sound (table) The `sound` table returned by `Audio:playSound`.
+function Audio:isPlaying(sound)
+  local sound_fx = self.sound_fx
+  if not sound_fx then
+    return
+  end
+
+  if sound and sound.handle then
+    return sound_fx:isPlaying(sound.handle)
+  end
+  return false
 end
 
 function Audio:cacheSoundFilenamesAssociatedWithName(name)
@@ -379,7 +460,7 @@ function Audio:playEntitySounds(names, entity, min_silence_lengths, max_silence_
 end
 
 local function canSoundsBePlayed()
-  return TheApp.config.play_sounds and not TheApp.world:isPaused()
+  return TheApp.config.play_sounds and TheApp.world and not TheApp.world:isPaused()
 end
 
 --[[
@@ -511,19 +592,34 @@ function Audio:playPreviousBackgroundTrack()
   self:playNextOrPreviousBackgroundTrack(-1)
 end
 
+function Audio:isPlayingWithMidiPlayer()
+  return self.midi_player and type(self.background_music) == 'number'
+end
+
 --! Pauses or unpauses background music depending on the current state.
 --! Returns whether music is currently paused or not after the call.
 --! If nil is returned music might either be playing or completely stopped.
 function Audio:pauseBackgroundTrack()
   assert(self.background_music, "Trying to pause music while music is stopped")
 
+  local use_midi_player = self:isPlayingWithMidiPlayer()
   local status
   if self.background_paused then
     self.background_paused = nil
-    status = SDL.audio.resumeMusic()
+    if use_midi_player then
+      self.midi_player:resume()
+      status = true
+    else
+      status = SDL.audio.resumeMusic()
+    end
   else
-    status = SDL.audio.pauseMusic()
     self.background_paused = true
+    if use_midi_player then
+      self.midi_player:pause()
+      status = true
+    else
+      status = SDL.audio.pauseMusic()
+    end
   end
 
   -- NB: Explicit false check, as old C side returned nil in all cases
@@ -532,7 +628,7 @@ function Audio:pauseBackgroundTrack()
     -- so just stop the music instead.
     self:stopBackgroundTrack()
     self.background_paused = nil
-  else
+  elseif not use_midi_player then
     -- SDL can also be odd and report music as paused even though it is still
     -- playing. If it really is paused, then there is no harm in muting it.
     -- If it wasn't really paused, then muting it is the next best thing that
@@ -558,9 +654,27 @@ function Audio:stopBackgroundTrack()
     self:pauseBackgroundTrack()
   end
   SDL.audio.stopMusic()
+  if self.midi_player then
+    self.midi_player:stop()
+  end
   self.background_music = nil
 
   self:notifyJukebox()
+end
+
+function Audio:getFileData(index)
+  local info = self.background_playlist[index]
+  assert(info, "Index not valid")
+  local data
+  if info.filename_music then
+    data = assert(GetFileData(info.filename_music))
+  else
+    data = assert(self.app.fs:readContents(info.filename))
+  end
+  if data:sub(1, 3) == "RNC" then
+    data = assert(rnc.decompress(data))
+  end
+  return data
 end
 
 --! Plays a given background track.
@@ -571,17 +685,21 @@ function Audio:playBackgroundTrack(index)
   assert(info, "Index not valid")
   if self.app.config.play_music then
     local music = info.music
-    if not music then
-      local data
-      if info.filename_music then
-        data = assert(GetFileData(info.filename_music))
-      else
-        data = assert(self.app.fs:readContents(info.filename))
-      end
-      if data:sub(1, 3) == "RNC" then
-        data = assert(rnc.decompress(data))
-      end
-      if not info.filename_music or info.is_xmi then
+    if not music or type(music) == 'number' then
+      local data = self:getFileData(index)
+      if (not info.filename_music or info.is_xmi) then
+        if self.midi_player then
+          self.midi_player:setVolume(self.app.config.music_volume)
+          self.midi_player:playXmi(data)
+
+          -- info.music has to be equal to background_music and both values need
+          -- to be truthy and unique for the jukebox to detect the track. Using
+          -- the index is just a convenient way to achieve this.
+          self.background_music = index
+          info.music = index
+          self:notifyJukebox()
+          return
+        end
         data = SDL.audio.transcodeXmiToMid(data)
       end
       -- Loading of music files can incur a slight pause, which is why it is
@@ -617,8 +735,8 @@ function Audio:playBackgroundTrack(index)
       end)
       return
     end
-    SDL.audio.setMusicVolume(self.app.config.music_volume)
     assert(SDL.audio.playMusic(music))
+    SDL.audio.setMusicVolume(self.app.config.music_volume)
     self.background_music = music
 
     self:notifyJukebox()
@@ -633,6 +751,10 @@ function Audio:onMusicOver()
 end
 
 function Audio:setBackgroundVolume(volume)
+  if self.midi_player then
+    self.app.config.music_volume = volume
+    self.midi_player:setVolume(volume)
+  end
   if self.background_paused then
     self.old_bg_music_volume = volume
   else

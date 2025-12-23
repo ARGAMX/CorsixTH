@@ -8,34 +8,29 @@
     },
     "sdl2",
     "luafilesystem",
-    "lpeg"
-  ],
-  "features": {
-    "audio": {
-      "description": "In game audio support",
-      "dependencies": [
-         {
-           "name": "fluidsynth",
-           "platform": "!osx",
-           "features": [
-             "sndfile"
-           ]
-        },
+    "lpeg",
+    "libpng",
+    {
+       "name": "fluidsynth",
+       "features": [
+         "sndfile"
+       ]
+    },
+    {
+      "name": "sdl2-mixer",
+      "features": [
+        "libmodplug",
         {
-          "name": "sdl2-mixer",
-          "features": [
-            "libmodplug",
-            {
-              "name": "fluidsynth",
-              "platform": "!osx"
-            },
-            "libflac",
-            "mpg123",
-            "opusfile"
-          ]
-        }
+          "name": "fluidsynth"
+        },
+        "libflac",
+        "mpg123",
+        "opusfile"
       ]
     },
+    "freetype"
+  ],
+  "features": {
     "animview": {
       "description": "Support building AnimView",
       "dependencies": [
@@ -69,10 +64,10 @@
         }
       ]
     },
-    "freetype": {
-      "description": "In game freetype font support",
+    "midi": {
+      "description": "Support MIDI devices",
       "dependencies": [
-        "freetype"
+        "rtmidi"
       ]
     },
     "catch2": {

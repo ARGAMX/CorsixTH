@@ -124,9 +124,14 @@ local config_defaults = {
   disable_fractured_bones_females = true,
   enable_avg_contents = false,
   remove_destroyed_rooms = false,
+  machine_menu_button = true,
+  enable_screen_shake = true,
   audio_frequency = 22050,
   audio_channels = 2,
   audio_buffer_size = 2048,
+  midi_api = nil,
+  midi_port = nil,
+  midi_sysex_master_volume = false,
   theme_hospital_install = [[X:\ThemeHospital\hospital]],
   debug = false,
   track_fps = false,
@@ -140,7 +145,6 @@ local config_defaults = {
   allow_blocking_off_areas = false,
   direct_zoom = nil,
   new_machine_extra_info = true,
-  debug_falling = false,
   player_name = [[]],
 }
 
@@ -236,8 +240,6 @@ local string_01 = [=[
 
 -------------------------------------------------------------------------------
 -- Audio global on/off switch.
--- Note that audio will also be disabled if CorsixTH was compiled without
--- the SDL_mixer library.
 --]=] .. '\n' ..
 'audio = ' .. tostring(config_values.audio) .. '\n' .. [=[
 
@@ -394,7 +396,19 @@ local string_01 = [=[
 -- By default destroyed rooms can't be removed. If you would like the game to
 -- give you the option of removing a destroyed room change this option to true.
 --]=] .. '\n' ..
-'remove_destroyed_rooms = ' .. tostring(config_values.remove_destroyed_rooms) .. '\n' .. [=[]=]
+'remove_destroyed_rooms = ' .. tostring(config_values.remove_destroyed_rooms) .. '\n' .. [=[
+
+-------------------------------------------------------------------------------
+-- By default machine menu is shown in a bottom panel. If you would like the
+-- game to hide it change this option to false.
+--]=] .. '\n' ..
+'machine_menu_button = ' .. tostring(config_values.machine_menu_button) .. '\n' .. [=[
+
+-------------------------------------------------------------------------------
+-- By default the entire screen will shake during earthquakes. If you would
+-- like the game to keep the screen stationary, change this option to false.
+--]=] .. '\n' ..
+'enable_screen_shake = ' .. tostring(config_values.enable_screen_shake) .. '\n' .. [=[]=]
 
 local string_02 = [=[
 
@@ -477,6 +491,26 @@ audio_music = nil -- [[X:\ThemeHospital\Music]]
 --
 soundfont = nil -- [[X:\ThemeHospital\FluidR3.sf3]]
 
+-------------------------------------------------------------------------------
+-- Midi API and Device settings.
+-- By default, CorsixTH uses FluidSynth or build defined MIDI synthesizer.
+-- You can change the API to target other available MIDI backends using these
+-- settings on supported platforms.
+-- Possible values for midi_api are:
+--   <nil>      - Uses SDL_Mixer's MIDI backend, typically FluidSynth
+--   Native     - Use any available platform MIDI API
+--   ALSA       - Use the ALSA MIDI API (Linux only)
+--   JACK       - Use the JACK MIDI API (Unix-like systems with JACK)
+--   CoreMIDI   - Use the CoreMIDI API (MacOS only)
+--   WindowsMM  - Use the Windows MultiMedia API (Windows only)
+--
+-- Possible values for midi_port depend on the selected midi_api, and can
+-- be left nil to use the system default port. A list of available ports
+-- can be obtained from the midi settings screen in game.
+--
+midi_api = nil -- [[Native]]
+midi_port = nil -- [[Midi Through:Midi Through Port-0 14:0]]
+
 ------------------------------- SPECIAL SETTINGS ------------------------------
 -- These settings can only be changed here
 -------------------------------------------------------------------------------
@@ -491,18 +525,21 @@ soundfont = nil -- [[X:\ThemeHospital\FluidR3.sf3]]
 'audio_buffer_size = ' .. tostring(config_values.audio_buffer_size) .. '\n' .. [=[
 
 -------------------------------------------------------------------------------
+-- Advanced MIDI settings.
+-- These settings can enable better MIDI playback on some systems but may also
+-- cause issues or be unsupported on others.
+--
+-- midi_sysex_master_volume: Use SysEx message instead of adjusted channel
+-- volume messages to set the music volume.
+--]=] .. '\n' ..
+'midi_sysex_master_volume = ' .. tostring(config_values.midi_sysex_master_volume) .. '\n' .. [=[
+
+-------------------------------------------------------------------------------
 -- Debug settings.
 -- If set to true more detailed information will be printed in the terminal
 -- and a debug menu will be visible.
 --]=] .. '\n' ..
 'debug = ' .. tostring(config_values.debug) .. '\n' .. [=[
-
--- Experimental setting for falling patients. (debug only!)
--- CorsixTH does not yet have reliable handling for falling actions and enabling it
--- could cause dropped action queues or undesired bugs. You should leave this setting
--- off unless you're developing with it
---]=] .. '\n' ..
-'debug_falling = ' .. tostring(config_values.debug_falling) .. '\n' .. [=[
 
 -- If set to true, the FPS, Lua memory usage, and entity count will be shown
 -- in the dynamic information bar. Note that setting this to true also turns
@@ -585,6 +622,7 @@ local hotkeys_defaults = {
   global_screenshot = {"ctrl", "s"},
   global_stop_movie = "escape",
   global_stop_movie_alt = "q",
+  global_pause_movie = "p",
   global_window_close = "escape",
   global_window_close_alt = "q",
   ingame_showmenubar = "escape",
@@ -623,6 +661,7 @@ local hotkeys_defaults = {
   ingame_panel_status = "f7",
   ingame_panel_charts = "f8",
   ingame_panel_policy = "f9",
+  ingame_panel_machineMenu = "f10",
   ingame_panel_map_alt = "t",
   ingame_panel_research_alt = "r",
   ingame_panel_casebook_alt = "c",
@@ -726,6 +765,7 @@ if hotkeys_needs_rewrite and TheApp then
 'global_runDebugScript = ' .. hotkeys_values.global_runDebugScript .. '\n' ..
 'global_screenshot = ' .. hotkeys_values.global_screenshot .. '\n' ..
 'global_stop_movie = ' .. hotkeys_values.global_stop_movie .. '\n' ..
+'global_pause_movie = ' .. hotkeys_values.global_pause_movie .. '\n' ..
 'global_window_close = ' .. hotkeys_values.global_window_close .. '\n' ..
 'global_stop_movie_alt =' .. hotkeys_values.global_stop_movie_alt .. '\n' ..
 'global_window_close_alt =' .. hotkeys_values.global_window_close_alt .. '\n' .. [=[
@@ -782,6 +822,7 @@ if hotkeys_needs_rewrite and TheApp then
 'ingame_panel_status = ' .. hotkeys_values.ingame_panel_status .. '\n' ..
 'ingame_panel_charts = ' .. hotkeys_values.ingame_panel_charts .. '\n' ..
 'ingame_panel_policy = ' .. hotkeys_values.ingame_panel_policy .. '\n' ..
+'ingame_panel_machineMenu = ' .. hotkeys_values.ingame_panel_machineMenu .. '\n' ..
 'ingame_panel_map_alt = ' .. hotkeys_values.ingame_panel_map_alt .. '\n' ..
 'ingame_panel_research_alt = ' .. hotkeys_values.ingame_panel_research_alt .. '\n' ..
 'ingame_panel_casebook_alt = ' .. hotkeys_values.ingame_panel_casebook_alt .. '\n' ..

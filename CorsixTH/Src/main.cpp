@@ -22,13 +22,13 @@ SOFTWARE.
 
 #include "config.h"
 
-#include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <fstream>
+#include <filesystem>
 #include <string>
+#include <string_view>
 
-#include "iso_fs.h"
 #include "lua.hpp"
 #include "lua_rnc.h"
 #include "lua_sdl.h"
@@ -36,6 +36,8 @@ SOFTWARE.
 #include "th_lua.h"
 
 #ifdef CORSIX_TH_SEARCH_LOCAL_DATADIRS
+#include <array>
+
 #include "../../libs/whereami/whereami.h"
 #endif
 
@@ -55,42 +57,33 @@ int luaopen_lpeg(lua_State* L);
 
 namespace {
 
-inline void preload_lua_package(lua_State* L, const char* name,
-                                lua_CFunction fn) {
-  luaT_execute(
-      L, std::string("package.preload.").append(name).append(" = ...").c_str(),
-      fn);
+bool file_exists(const std::filesystem::path& f) {
+  const std::filesystem::file_status st = std::filesystem::status(f);
+  return std::filesystem::exists(st) && !std::filesystem::is_directory(st);
 }
-
-// relace me with C++17 std::filesystem::exists
-inline bool file_exists(const char* f) {
-  std::ifstream file(f);
-  return file.is_open();
-}
-
-inline bool file_exists(const std::string& f) { return file_exists(f.c_str()); }
 
 std::string search_script_file(lua_State* L) {
   // 1. Check for --interpreter
-  int iNArgs = lua_gettop(L);
+  const int iNArgs = lua_gettop(L);
   for (int i = 1; i <= iNArgs; ++i) {
     if (lua_type(L, i) == LUA_TSTRING) {
-      size_t iLen;
-      const char* sCmd = lua_tolstring(L, i, &iLen);
-      if (iLen > 14 && std::memcmp(sCmd, "--interpreter=", 14) == 0)
-        return sCmd + 14;
+      std::string_view interpreterPrefix("--interpreter=");
+      std::string_view arg = lua_tolstring(L, i, nullptr);
+      if (arg.substr(0, interpreterPrefix.size()) == interpreterPrefix)
+        return std::string(arg.substr(interpreterPrefix.size()));
     }
   }
 
 #ifdef CORSIX_TH_SEARCH_LOCAL_DATADIRS
   // 2. Find CorsixTH.lua in working dir and program dir
-  static constexpr std::array<const char*, 4> asSearchDirs{
+  static constexpr std::array<const char*, 5> asSearchDirs{
       "./",
       "CorsixTH/",
       "Contents/Resources/",
       "../Resources/",
+      "../share/corsix-th/",
   };
-  std::string strProgramDir = "";
+  std::string strProgramDir;
   {
     int iProgramPathLength = wai_getExecutablePath(nullptr, 0, nullptr);
     if (iProgramPathLength != 0) {
@@ -114,7 +107,6 @@ std::string search_script_file(lua_State* L) {
         std::fflush(stderr);
         exit(255);
       }
-      // replace me with C++17 std::filesystem::path::preferred_separator
       sProgramDir[iProgramDirLength] = '/';
       sProgramDir[iProgramDirLength + 1] = '\0';
       strProgramDir = sProgramDir;

@@ -32,7 +32,9 @@ SOFTWARE.
 #endif
 
 #include "bootstrap.h"
+#include "lua.hpp"
 #include "th.h"
+#include "th_lua.h"
 #include "th_lua_internal.h"
 
 const char* update_check_url =
@@ -47,6 +49,7 @@ void lua_register_strings(const lua_register_state* pState);
 void lua_register_ui(const lua_register_state* pState);
 void lua_register_lfs_ext(const lua_register_state* pState);
 void lua_register_iso_fs(const lua_register_state* pState);
+void lua_register_midi(const lua_register_state* pState);
 
 //! Set a field on the environment table of an object
 void luaT_setenvfield(lua_State* L, int index, const char* k) {
@@ -237,7 +240,7 @@ int l_load_strings(lua_State* L) {
 }
 
 int get_api_version() {
-#include "../Lua/api_version.lua"
+#include "../Lua/api_version.lua"  // IWYU pragma: keep
 }
 
 int l_get_compile_options(lua_State* L) {
@@ -248,19 +251,26 @@ int l_get_compile_options(lua_State* L) {
   lua_pushliteral(L, CORSIX_TH_ARCH);
   lua_setfield(L, -2, "arch");
 
-#ifdef CORSIX_TH_USE_SDL_MIXER
-  lua_pushboolean(L, 1);
-#else
-  lua_pushboolean(L, 0);
-#endif
-  lua_setfield(L, -2, "audio");
-
 #ifdef WITH_UPDATE_CHECK
   lua_pushboolean(L, 1);
 #else
   lua_pushboolean(L, 0);
 #endif
   lua_setfield(L, -2, "update_check");
+
+#ifdef CORSIX_TH_USE_FFMPEG
+  lua_pushboolean(L, 1);
+#else
+  lua_pushboolean(L, 0);
+#endif
+  lua_setfield(L, -2, "movies");
+
+#ifdef WITH_MIDI_DEVICE
+  lua_pushboolean(L, 1);
+#else
+  lua_pushboolean(L, 0);
+#endif
+  lua_setfield(L, -2, "midi_device");
 
   lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
   lua_getfield(L, -1, "jit");
@@ -279,6 +289,12 @@ int l_get_compile_options(lua_State* L) {
 
   lua_pushinteger(L, get_api_version());
   lua_setfield(L, -2, "api_version");
+
+#ifdef CORSIX_TH_FONT
+  // Set default value of font file
+  lua_pushliteral(L, CORSIX_TH_FONT);
+  lua_setfield(L, -2, "font");
+#endif
 
   return 1;
 }
@@ -323,6 +339,7 @@ int luaopen_th(lua_State* L) {
   lua_register_ui(pState);
   lua_register_lfs_ext(pState);
   lua_register_iso_fs(pState);
+  lua_register_midi(pState);
 
   lua_settop(L, oState.main_table);
   return 1;
@@ -372,6 +389,12 @@ void luaT_execute_loadstring(lua_State* L, const char* sLuaString) {
 void luaT_execute(lua_State* L, const char* sLuaString) {
   luaT_execute_loadstring(L, sLuaString);
   lua_call(L, 0, LUA_MULTRET);
+}
+
+void preload_lua_package(lua_State* L, const char* name, lua_CFunction fn) {
+  luaT_execute(
+      L, std::string("package.preload.").append(name).append(" = ...").c_str(),
+      fn);
 }
 
 void luaT_push(lua_State* L, lua_CFunction f) { luaT_pushcfunction(L, f); }

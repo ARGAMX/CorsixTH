@@ -33,7 +33,7 @@ function UIFax:UIFax(ui, icon)
   self.background = gfx:loadRaw("Fax01V", 640, 480, "QData", "QData", "Fax01V.pal", true)
   local palette = gfx:loadPalette("QData", "Fax01V.pal", true)
   self.panel_sprites = gfx:loadSpriteTable("QData", "Fax02V", true, palette)
-  self.fax_font = gfx:loadFont("QData", "Font51V", false, palette)
+  self.fax_font = gfx:loadFontAndSpriteTable("QData", "Font51V", false, palette)
   self.icon = icon
   self.message = icon.message or {}
   self.owner = icon.owner
@@ -110,7 +110,7 @@ function UIFax:draw(canvas, x, y)
     local last_y = y + 40
     for _, message in ipairs(self.message) do
       last_y = self.fax_font:drawWrapped(canvas, message.text, x + 190,
-                                         last_y + (message.offset or 0), 330,
+                                         last_y + (message.offset or 0), 360,
                                          "center")
     end
     local choices = self.message.choices
@@ -215,11 +215,12 @@ function UIFax:choice(choice_number)
     else
       local campaign_info = self.ui.app.world.campaign_info
       for i, level in ipairs(campaign_info.levels) do
-        if self.ui.app.world.map.level_filename == level then
-          local level_info, _ = self.ui.app:readLevelFile(campaign_info.levels[i + 1])
+        local filename = self.ui.app.world.map.level_filename or self.ui.app.world.map.level_number
+        if filename == level then
+          local level_info, _ = self.ui.app:readLevelFile(campaign_info.levels[i + 1], campaign_info.folder)
           if level_info then
             self.ui.app:loadLevel(level_info.path, nil, level_info.name,
-                level_info.map_file, level_info.briefing, nil, _S.errors.load_level_prefix, self.ui.app.world.campaign_info)
+                level_info.map_file, level_info.briefing, nil, _S.errors.load_level_prefix, campaign_info)
             if campaign_info.movie then
               local n = math.max(1, 12 - #campaign_info.levels + i)
               self.ui.app.moviePlayer:playAdvanceMovie(n)
@@ -296,7 +297,7 @@ function UIFax:afterLoad(old, new)
     self.background = gfx:loadRaw("Fax01V", 640, 480, "QData", "QData", "Fax01V.pal", true)
     local palette = gfx:loadPalette("QData", "Fax01V.pal", true)
     self.panel_sprites = gfx:loadSpriteTable("QData", "Fax02V", true, palette)
-    self.fax_font = gfx:loadFont("QData", "Font51V", false, palette)
+    self.fax_font = gfx:loadFontAndSpriteTable("QData", "Font51V", false, palette)
   end
   UIFullscreen.afterLoad(self, old, new)
   if old < 59 then

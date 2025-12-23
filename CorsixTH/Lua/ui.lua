@@ -150,7 +150,7 @@ function UI:UI(app, minimal)
     self.tooltip_font = app.gfx:loadBuiltinFont()
   else
     local palette = app.gfx:loadPalette("QData", "PREF01V.PAL", true)
-    self.tooltip_font = app.gfx:loadFont("QData", "Font00V", false, palette)
+    self.tooltip_font = app.gfx:loadFontAndSpriteTable("QData", "Font00V", false, palette)
   end
   self.tooltip = nil
   self.tooltip_counter = 0
@@ -215,6 +215,7 @@ function UI:setupGlobalKeyHandlers()
   self:addKeyHandler("global_cancel_alt", self, self.closeWindow)
   self:addKeyHandler("global_stop_movie", self, self.stopMovie)
   self:addKeyHandler("global_stop_movie_alt", self, self.stopMovie)
+  self:addKeyHandler("global_pause_movie", self, self.pauseMovie)
   self:addKeyHandler("global_screenshot", self, self.makeScreenshot)
   self:addKeyHandler("global_fullscreen_toggle", self, self.fullscreenHotkey)
   self:addKeyHandler("global_exitApp", self, self.exitApplication)
@@ -224,11 +225,28 @@ function UI:setupGlobalKeyHandlers()
   self:addOrRemoveDebugModeKeyHandlers()
 end
 
--- Used for everything except music and announcements
-function UI:playSound(name, played_callback, played_callback_delay)
+--! Play a sound effect
+--!param name (string) The name of the sound to be played. Can include
+--  wildcards (*).
+--!param played_callback (function) A function to be called when the sound has
+--  finished playing. Can be nil.
+--!param played_callback_delay (integer) An optional delay in milliseconds
+--  before the played_callback is called.
+--!param loops (integer) number of times to play the audio. -1 for infinite.
+--!return (table) A `sound` table for passing into functions that act on the
+--  playing sound. The fields are an implementation detail that should not be
+--  used outside of the Audio class.
+function UI:playSound(name, played_callback, played_callback_delay, loops)
   if self.app.config.play_sounds then
-    self.app.audio:playSound(name, nil, false, played_callback, played_callback_delay)
+    return self.app.audio:playSound(name, nil, false, played_callback, played_callback_delay, loops)
   end
+end
+
+--! Stop the given sound
+-- see Audio:stopSound
+--!param sound (table) sound to stop
+function UI:stopSound(sound)
+  self.app.audio:stopSound(sound)
 end
 
 -- Stub with args for subclass GameUI.
@@ -1089,7 +1107,7 @@ function UI:afterLoad(old, new)
       gfx.builtin_font = nil
 
       local palette = gfx:loadPalette("QData", "PREF01V.PAL", true)
-      self.tooltip_font = gfx:loadFont("QData", "Font00V", false, palette)
+      self.tooltip_font = gfx:loadFontAndSpriteTable("QData", "Font00V", false, palette)
     end
   end
 
@@ -1106,16 +1124,20 @@ end
 function UI:tutorialStep(...)
 end
 
+--! Perform the Screenshot action (usually by key bind 'global_screenshot')
 function UI:makeScreenshot()
-   -- Find an index for screenshot which is not already used
-  local i = 0
-  local filename
-  repeat
-    filename = TheApp.screenshot_dir .. ("screenshot%i.bmp"):format(i)
-    i = i + 1
-  until lfs.attributes(filename, "size") == nil
-  print("Taking screenshot: " .. filename)
-  local res, err = self.app.video:takeScreenshot(filename) -- Take screenshot
+  -- Generate filename
+  local timestamp = os.date("%Y%m%d-%H%M%S")
+  local filename = TheApp.screenshot_dir .. ("Screenshot_%s.png"):format(timestamp)
+
+  -- It's very unlikely you intentionally want multiple screenshots a second
+  if lfs.attributes(filename, "size") ~= nil then
+    print("Screenshot failed: File already exists")
+    return
+  end
+
+  -- Take screenshot
+  local res, err = self.app.video:takeScreenshot(filename)
   if not res then
     print("Screenshot failed: " .. err)
   else
@@ -1174,6 +1196,12 @@ end
 function UI:stopMovie()
   if self.app.moviePlayer.playing then
     self.app.moviePlayer:stop()
+  end
+end
+
+function UI:pauseMovie()
+  if self.app.moviePlayer.playing then
+    self.app.moviePlayer:togglePause()
   end
 end
 

@@ -75,6 +75,15 @@ function table_length(table)
   return count
 end
 
+--! Get a random item from an array.
+--!param array Array with 0 or more items.
+--!return (nil or an item)
+function getRandomEntryFromArray(array)
+  if #array == 0 then return nil end
+  if #array == 1 then return array[1] end
+  return array[math.random(1, #array)]
+end
+
 -- Variation on loadfile() which allows for the loaded file to have global
 -- references resolved in supplied tables. On failure, returns nil and an
 -- error. On success, returns the file as a function just like loadfile() does
@@ -215,6 +224,23 @@ DrawFlags.EarlyList       = 2^10
 DrawFlags.ListBottom      = 2^11
 DrawFlags.BoundBoxHitTest = 2^12
 DrawFlags.Crop            = 2^13
+
+-- Order of animations within a tile. Animations with a smaller number are
+-- drawn first.
+DrawingLayers = {}
+DrawingLayers.Litter = 0
+DrawingLayers.Door = 0
+DrawingLayers.RatHole = 0
+DrawingLayers.NorthSideObject = 1
+DrawingLayers.WestSideObject = 2
+DrawingLayers.AtomAnalyser = 3
+DrawingLayers.ReceptionistFacingUser = 3 -- Facing east or south.
+DrawingLayers.Entity = 4 -- All 'normal' animations.
+DrawingLayers.ReceptionistFacingAway = 5 -- Facing west or north.
+DrawingLayers.MachineSmoke = 6 -- smoke animation should be in front of machine (entity)
+DrawingLayers.FloatingDollars = 7
+DrawingLayers.EastSideObject = 8
+DrawingLayers.SouthSideObject = 9
 
 -- Keep in sync with animation_effect in th_gfx_common.h
 AnimationEffect = {}

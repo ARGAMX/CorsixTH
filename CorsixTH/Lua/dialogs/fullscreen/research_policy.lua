@@ -43,15 +43,20 @@ function UIResearch:UIResearch(ui)
   self.background = gfx:loadRaw("Res01V", 640, 480, "QData", "QData", "Res01V.pal", true)
   local palette = gfx:loadPalette("QData", "Res01V.pal", true)
   self.panel_sprites = gfx:loadSpriteTable("QData", "Res02V", true, palette)
-  self.label_font = gfx:loadFont("QData", "Font43V", false, palette)
-  self.number_font  = gfx:loadFont("QData", "Font43V", false, palette)
+  self.label_font = gfx:loadFontAndSpriteTable("QData", "Font43V", false, palette)
+  self.number_font  = gfx:loadFontAndSpriteTable("QData", "Font43V", false, palette)
   self.hospital = ui.hospital
   self.research = ui.hospital.research
 
+  self:_playBgSound()
+
   -- stubs for backwards compatibility
-  local --[[persistable:research_policy_adjust]] function adjust() end
-  local --[[persistable:research_less_stub]] function less_stub() end
-  local --[[persistable:research_more_stub]] function more_stub() end
+  --luacheck: push no unused
+  local --[[persistable:research_policy_adjust]] function _1() end
+  local --[[persistable:research_less_stub]] function _2() end
+  local --[[persistable:research_more_stub]] function _3() end
+  local --[[persistable:research_policy_window_reset_bg_sound]] function _4() end
+  --luacheck: pop
 
   -- Close button
   self:addPanel(0, 607, 447):makeButton(0, 0, 40, 40, 4, self.close):setTooltip(_S.tooltip.research.close)
@@ -159,6 +164,11 @@ function UIResearch:adjustResearch(area, mode)
   end
 end
 
+--! Construct and play this window's background sound.
+function UIResearch:_playBgSound()
+  self.bg_sound = self.ui:playSound("Research.wav", nil, nil, -1)
+end
+
 function UIResearch:onTick()
   -- sprite index for the water are between 5 and 12
   -- We use a sub clock
@@ -225,6 +235,7 @@ function UIResearch:draw(canvas, x, y)
 end
 
 function UIResearch:close()
+  self.ui:stopSound(self.bg_sound)
   UIFullscreen.close(self)
   self.ui:getWindow(UIBottomPanel):updateButtonStates()
 end
@@ -245,7 +256,8 @@ function UIResearch:afterLoad(old, new)
     self.background = gfx:loadRaw("Res01V", 640, 480, "QData", "QData", "Res01V.pal", true)
     local palette = gfx:loadPalette("QData", "Res01V.pal", true)
     self.panel_sprites = gfx:loadSpriteTable("QData", "Res02V", true, palette)
-    self.label_font = gfx:loadFont("QData", "Font43V", false, palette)
-    self.number_font  = gfx:loadFont("QData", "Font43V", false, palette)
+    self.label_font = gfx:loadFontAndSpriteTable("QData", "Font43V", false, palette)
+    self.number_font  = gfx:loadFontAndSpriteTable("QData", "Font43V", false, palette)
   end
+  self:_playBgSound()
 end

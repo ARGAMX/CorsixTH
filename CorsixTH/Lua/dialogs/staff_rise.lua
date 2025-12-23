@@ -46,8 +46,8 @@ function UIStaffRise:UIStaffRise(ui, staff, rise_amount)
   self:setDefaultPosition(0.5, 0.5)
 
   self.panel_sprites = app.gfx:loadSpriteTable("QData", "Req12V", true)
-  self.white_font = app.gfx:loadFont("QData", "Font01V")
-  self.black_font = app.gfx:loadFont("QData", "Font00V")
+  self.white_font = app.gfx:loadFontAndSpriteTable("QData", "Font01V")
+  self.black_font = app.gfx:loadFontAndSpriteTable("QData", "Font00V")
   self.face_parts = app.gfx:loadRaw("Face01V", 65, 1350, nil, "Data", "MPalette.dat")
 
   -- Left hand side
@@ -81,7 +81,7 @@ function UIStaffRise:UIStaffRise(ui, staff, rise_amount)
   self:makeTooltip(_S.tooltip.staff_window.salary, 14, 171, 168, 193)
   self:makeTooltip(_S.tooltip.staff_window.ability, 12, 213, 89, 243)
 
-  if profile.humanoid_class == "Doctor" then
+  if class.is(staff, Doctor) then
     self:makeTooltip(_S.tooltip.staff_window.doctor_seniority, 89, 197, 168, 243)
     self:makeTooltip(_S.tooltip.staff_window.skills, 14, 132, 47, 166)
 
@@ -110,7 +110,7 @@ end
 function UIStaffRise:getStaffPosition(dx, dy)
   local staff = self.staff
   local x, y = self.ui.app.map:WorldToScreen(staff.tile_x, staff.tile_y)
-  local px, py = staff.th:getMarker()
+  local px, py = staff.th:getSecondaryMarker()
   return x + px - (dx or 0), y + py - (dy or 0)
 end
 
@@ -138,7 +138,7 @@ function UIStaffRise:draw(canvas, x, y)
     end
   end
 
-  if self.staff.profile.humanoid_class == "Doctor" then
+  if class.is(self.staff, Doctor) then
     self:drawDoctorAttributes(canvas)
   end
 
@@ -188,6 +188,6 @@ end
 function UIStaffRise:afterLoad(old, new)
   Window.afterLoad(self, old, new)
   if not self.black_font then
-    self.black_font = self.ui.app.gfx:loadFont("QData", "Font00V")
+    self.black_font = self.ui.app.gfx:loadFontAndSpriteTable("QData", "Font00V")
   end
 end

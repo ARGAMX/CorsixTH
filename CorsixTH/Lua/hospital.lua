@@ -158,8 +158,8 @@ function Hospital:Hospital(world, avail_rooms, name)
   self:unconditionalChangeReputation(0) -- Reset self.has_impressive_reputation
 
   self.sodas_sold = 0
-  self.num_vips_ty  = 0 -- used to count how many VIP visits in the year for an award
-  self.pleased_vips_ty  = 0
+  self.num_vips_ty = 0 -- used to count how many VIP visits in the year for an award
+  self.pleased_vips_ty = 0
   self.num_cured_ty = 0
   self.not_cured_ty = 0
   self.num_visitors_ty = 0
@@ -930,7 +930,7 @@ function Hospital:onEndDay()
   -- Count receptionists.
   self.receptionist_count = 0
   for _, staff in ipairs(self.staff) do
-    if staff.humanoid_class == "Receptionist" then
+    if class.is(staff, Receptionist) then
       self.receptionist_count = self.receptionist_count + 1
     end
   end
@@ -1022,7 +1022,8 @@ function Hospital:onEndMonth()
   self.research:checkAutomaticDiscovery(self.world:date():monthOfGame())
 
   -- Add some interesting statistics.
-  self.statistics[self.world:date():monthOfGame() + 1] = {
+  local newMonth = self.world:date():monthOfGame() + 1
+  self.statistics[newMonth] = {
     money_in = self.money_in,
     money_out = self.money_out,
     wages = wages,
@@ -1078,7 +1079,11 @@ end
 --! Called at the end of each year
 function Hospital:onEndYear()
   self.sodas_sold = 0
-  self.num_vips_ty  = 0
+  self.num_vips_ty = 0
+  self.pleased_vips_ty = 0
+  self.num_cured_ty = 0
+  self.not_cured_ty = 0
+  self.num_visitors_ty = 0
   self.num_deaths_this_year = 0
 
   self.has_impressive_reputation = true
@@ -1131,8 +1136,8 @@ function Hospital:resolveEmergency()
   local rescued_patients = emer.cured_emergency_patients
   for _, patient in ipairs(self.emergency_patients) do
     if patient and not patient.cured and not patient.dead
-        and not patient.going_home and not patient:getRoom() then
-      patient:die()
+        and not patient.going_home then
+      patient:setToDying()
     end
   end
   local total = emer.victims
@@ -1187,7 +1192,7 @@ function Hospital:spawnContagiousPatient()
   end
 
   if self:hasStaffedDesk() then
-    local patient = self.world:newEntity("Patient", 2)
+    local patient = self.world:newEntity("Patient", 2, 1)
     local contagious_diseases = get_available_contagious_diseases()
     if #contagious_diseases > 0 then
       local disease = contagious_diseases[math.random(1,#contagious_diseases)]
@@ -1536,7 +1541,7 @@ function Hospital:initStaff()
         added_staff = false
       end
       if added_staff then
-        local staff = self.world:newEntity(profile.humanoid_class, 2)
+        local staff = self.world:newEntity(profile.humanoid_class, 2, 2)
         staff:setProfile(profile)
 
         -- Identify a safe starting place and

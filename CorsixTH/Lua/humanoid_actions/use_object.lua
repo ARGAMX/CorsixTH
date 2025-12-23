@@ -132,7 +132,7 @@ local function setHumanoidTileSpeed(action, humanoid)
   else
     tx, ty = object:getRenderAttachTile()
   end
-  if humanoid.humanoid_class == "Handyman" and
+  if class.is(humanoid, Handyman) and
       obj_orient.added_handyman_animate_offset_while_in_use then
     tx = tx + obj_orient.added_handyman_animate_offset_while_in_use[1]
     ty = ty + obj_orient.added_handyman_animate_offset_while_in_use[2]
@@ -195,7 +195,7 @@ local function action_use_phase(action, humanoid, phase)
   local anim = anim_table[humanoid.humanoid_class]
   if not anim then
     -- Handymen have their own number of animations.
-    if humanoid.humanoid_class == "Handyman" then
+    if class.is(humanoid, Handyman) then
       --action_use_phase(action, humanoid, action_use_next_phase(action, phase))
       action_use_object_tick(humanoid)
       return
@@ -285,7 +285,7 @@ local function action_use_phase(action, humanoid, phase)
   setHumanoidTileSpeed(action, humanoid)
   humanoid.user_of = object
 
-  local frame_count = humanoid.world:getAnimLength(anim)
+  local frame_count = TheApp.animation_manager:getAnimLength(anim)
   local action_anim_count = 1 -- Number of times to show 'in_use' animation for the action.
   if action.min_length and phase == 0 then
     -- 'action.min_length' is a frame count, convert to number of complete animations.
@@ -386,12 +386,13 @@ action_use_object_tick = permanent"action_use_object_tick"( function(humanoid)
 
     -- Check if the room is about to be destroyed
     local room_destroyed = false
-    if object.strength then
-      if humanoid.humanoid_class ~= "Handyman"  then
+    if object:isMachine() then
+      if not class.is(humanoid, Handyman) then
         room_destroyed = object:machineUsed(humanoid:getRoom())
       end
     elseif object:getDynamicInfo() and not object.master then
       -- Don't update if it is a slave object.
+      object:incrementUsedCount()
       object:updateDynamicInfo()
     end
     if not room_destroyed then
@@ -416,7 +417,7 @@ action_use_object_tick = permanent"action_use_object_tick"( function(humanoid)
 end)
 
 local action_use_object_interrupt = permanent"action_use_object_interrupt"( function(action, humanoid, high_priority)
-  if high_priority then
+  if not action.uninterruptible and high_priority then
     local object = action.object
     if humanoid.user_of then
       finish_using(object, humanoid) -- Cleanup after usage.
@@ -426,7 +427,7 @@ local action_use_object_interrupt = permanent"action_use_object_interrupt"( func
     humanoid:setTimer(nil)
     humanoid:setTilePositionSpeed(action.old_tile_x, action.old_tile_y)
     humanoid:finishAction()
-  elseif not humanoid.timer_function then
+  elseif not action.uninterruptible and not humanoid.timer_function then
     humanoid:setTimer(1, action_use_object_tick)
   end
   -- Only patients can be vaccination candidates so no need to check
@@ -455,7 +456,7 @@ local function action_use_object_start(action, humanoid)
   end
 
   -- The handyman has his own place to be in
-  if spec.finish_use_position and humanoid.humanoid_class ~= "Handyman" then
+  if spec.finish_use_position and not class.is(humanoid, Handyman) then
     action.old_tile_x = object.tile_x + spec.finish_use_position[1]
     action.old_tile_y = object.tile_y + spec.finish_use_position[2]
   end

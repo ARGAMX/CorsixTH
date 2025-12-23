@@ -24,7 +24,7 @@
 ;---------------------------------- Definitions for the game -----------------------------------
 
 !define PRODUCT_NAME "CorsixTH"
-!define PRODUCT_VERSION "0.68.0"
+!define PRODUCT_VERSION "0.69.1"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
 !define PRODUCT_STARTMENU_REGVAL "NSIS:StartMenuDir"
@@ -53,7 +53,14 @@ InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
 ; This is needed to be able to install into the program files directory
 RequestExecutionLevel admin
 
+; Set installer compression
+SetCompressor lzma
+SetCompressorDictSize 16
+
 ; -------------------- Definitions and macros that create the graphical interface -----------------
+
+; Set DPI awareness
+ManifestDPIAware true
 
 ; MUI Settings
 !define MUI_ABORTWARNING

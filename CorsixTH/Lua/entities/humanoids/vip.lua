@@ -205,9 +205,7 @@ function Vip:evaluateRoom()
       self.room_eval = self.room_eval + 1
       -- Only count this object type once
       room_bin = 1
-    end
-
-    if object.strength then
+    elseif object:isMachine() then
       self.room_eval = object:isBreaking() and self.room_eval - 1 or self.room_eval + 1
     end
   end
@@ -504,8 +502,15 @@ function Vip:afterLoad(old, new)
       end
     end
   end
+
   if old < 207 then
     self.slow_animation = true
   end
+
+  if old < 213 then
+    self.mood_marker = 2
+  end
+
+  self:updateDynamicInfo()
   Humanoid.afterLoad(self, old, new)
 end

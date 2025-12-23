@@ -136,8 +136,8 @@ function Earthquake:tick()
 
   for _, room in pairs(self.world.rooms) do
     for object, _ in pairs(room.objects) do
-      if object.strength then
-        object:machineUsed(room)
+      if object:isMachine() then
+        object:earthquakeImpact(room)
       end
     end
   end
@@ -145,15 +145,11 @@ function Earthquake:tick()
   self.remaining_damage = self.remaining_damage - 1
   self.damage_timer = self.damage_timer + damage_time
 
-  -- The below code triggers random patient falls during an earthquake.
-  -- It is currently disabled except for debugging purposes in the config file.
-  -- Current behaviour can cause empty action queues or other undesired behaviours.
-  -- Once working, the debugging flag can be removed.
-  if not TheApp.config.debug_falling then return end
+  -- A patient might fall over during an earthquake.
   local hospital = self.world:getLocalPlayerHospital()
   -- loop through the patients and allow the possibility for them to fall over
   for _, patient in ipairs(hospital.patients) do
-    if not patient.in_room and patient.falling_anim then
+    if not patient.in_room and patient.falling_anim and math.random(1,2) == 2 then
       patient:falling(false)
     end
   end
@@ -224,7 +220,7 @@ end
 function Earthquake:afterLoad(old, new) -- luacheck: ignore 212 keep params from parent function
   local old_quake = self.world.next_earthquake
   if old < 115 then
-    if old_quake.active then
+    if old_quake and old_quake.active then
       local rd = 0
       for _, room in pairs(self.world.rooms) do
         for object, _ in pairs(room.objects) do

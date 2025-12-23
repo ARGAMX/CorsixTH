@@ -20,12 +20,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "config.h"
+#include <SDL.h>
 
 #include <array>
 #include <cstdio>
 #include <cstring>
 
+#include "lua.hpp"
 #include "lua_sdl.h"
 #include "th_lua.h"
 
@@ -67,13 +68,13 @@ Uint32 timer_frame_callback(Uint32 interval, void* param) {
 
 class fps_ctrl {
  public:
-  bool limit_fps;
-  bool track_fps;
+  bool limit_fps{true};
+  bool track_fps{true};
 
-  size_t q_front;
-  size_t q_back;
-  int frame_count;
-  std::array<Uint32, 4096> frame_time;
+  size_t q_front{0};
+  size_t q_back{0};
+  int frame_count{0};
+  std::array<Uint32, 4096> frame_time{};
 
   void init() {
     limit_fps = true;
