@@ -1,0 +1,132 @@
+---
+name: macOS
+
+on:
+  push:
+    branches-ignore:
+      - 'gh-pages'
+    paths:
+      - '.github/workflows/macOS.yml'
+      - '*vcpkg*'
+      - '*cmake*'
+      - '*cpp'
+      - 'scripts/macos_luarocks'
+  pull_request:
+    paths:
+      - '.github/workflows/macOS.yml'
+      - '*vcpkg*'
+      - '*cmake*'
+      - '*cpp'
+      - 'scripts/macos_luarocks'
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Arch?'
+        type: choice
+        options:
+        - 'Apple Silicon'
+        - 'Intel'
+        default: 'Apple Silicon'
+      animview:
+        description: 'AnimView?'
+        type: boolean
+      pr:
+        description: 'Build this PR'
+        type: string
+
+jobs:
+  macOS:
+    runs-on: ${{inputs.arch == 'Intel' && 'macos-15-intel' || 'macos-26'}}
+    name: macOS ${{inputs.arch || 'Apple Silicon'}} vcpkg (ad-hoc signed)
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg_cache,readwrite
+    steps:
+      - uses: actions/checkout@v4
+      - name: Define job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{inputs.pr}}" -gt 0 ]]; then
+            gh pr checkout --repo CorsixTH/CorsixTH ${{inputs.pr}}
+          fi
+          if [ "${{inputs.arch}}" == "Intel" ]; then
+            echo "TRIPLET=macos-x64-rel" >> $GITHUB_ENV
+            target="11.3" # macOS Ventura
+          else
+            echo "TRIPLET=macos-arm64-rel" >> $GITHUB_ENV
+            defaults read /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Info.plist MinimumSDKVersion
+            git clone https://github.com/timursavchenko/MacOSX-SDKs --no-checkout --depth 1 --filter=blob:none
+            cd MacOSX-SDKs
+            git sparse-checkout init --cone
+            git sparse-checkout set MacOSX14.0.sdk
+            git checkout master
+            mv MacOSX14.0.sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/
+            target="14" # macOS Sonoma
+          fi
+          if [ "${{inputs.animview}}" == "true" ]; then
+            echo "animview=,'-DBUILD_ANIMVIEW=ON'" >> $GITHUB_ENV
+          fi
+          echo "MACOSX_DEPLOYMENT_TARGET=$target" >> $GITHUB_ENV
+          echo "CFLAGS=-O2 -pipe -mmacos-version-min=$target" >> $GITHUB_ENV
+          echo "CXXFLAGS=-O2 -pipe -mmacos-version-min=$target" >> $GITHUB_ENV
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install nasm # for ffmpeg build
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-${{env.TRIPLET}}-${{hashFiles('vcpkg.json','vcpkg-configuration.json')}}
+          restore-keys: vcpkg-${{env.TRIPLET}}-
+
+      - uses: lukka/get-cmake@v3.31.6
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+
+      - name: Run CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: '${{env.TRIPLET}}'
+          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=/Applications'${{env.animview}}]"
+          buildPreset: '${{env.TRIPLET}}'
+          buildPresetAdditionalArgs: "['--target install']"
+          testPreset: '${{env.TRIPLET}}'
+      - name: Save vcpkg cache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-${{env.TRIPLET}}-${{hashFiles('vcpkg.json','vcpkg-configuration.json')}}
+
+      - name: Sign and test CorsixTH
+        run: |
+          # Ad-hoc sign
+          codesign --deep --timestamp --sign - /Applications/CorsixTH.app/
+          codesign -dvvvv /Applications/CorsixTH.app/
+          # Test (needs lpeg/lfs built in or luarocks in place)
+          /Applications/CorsixTH.app/Contents/MacOS/CorsixTH > test & sleep 2; kill $!
+          grep -e "Welcome to CorsixTH" test
+
+      - name: Sign and test Animview
+        if: ${{env.animview}}
+        run: |
+          # Ad-hoc sign
+          codesign --deep --timestamp --sign - /Applications/AnimView.app/
+          codesign -dvvvv /Applications/AnimView.app/
+          # Test (it's silent)
+          /Applications/AnimView.app/Contents/MacOS/AnimView & sleep 2; kill $!
+
+      - name: Create build artifact
+        shell: bash
+        run: |
+          repo=$(echo $GITHUB_REPOSITORY-$GITHUB_REF | sed -e 's/\//-/g' -e 's/refs-heads-//')
+          build="${{inputs.arch == 'Intel' && 'Intel' || 'AppleSilicon'}}"
+          name="CTH-$(date +'%Y-%m-%d-%H-%M-%S')-$build-$repo-${GITHUB_SHA:0:7}"
+          echo "NAME=$name" >> $GITHUB_ENV
+          cd /Applications/
+          zip $GITHUB_WORKSPACE/$name --symlinks --recurse-paths CorsixTH.app/ AnimView.app/ || true
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: 'CTH*'
+          name: ${{ env.NAME }}
+        continue-on-error: true
