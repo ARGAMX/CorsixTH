@@ -590,7 +590,7 @@ end
 
 function UI:changeResolution(width, height)
   self.app:prepareVideoUpdate()
-  local error_message = self.app.video:update(width, height, unpack(self.app.modes))
+  local error_message = self.app.video:update(width, height, TheApp.config.ui_scale, unpack(self.app.modes))
   self.app:finishVideoUpdate()
 
   if error_message then

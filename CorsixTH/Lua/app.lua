@@ -160,7 +160,7 @@ function App:init()
     modes[#modes + 1] = "direct zoom"
   end
   self.modes = modes
-  self.video = assert(TH.surface(self.config.width, self.config.height, unpack(modes)))
+  self.video = assert(TH.surface(self.config.width, self.config.height, self.config.ui_scale, unpack(modes)))
   self.video:setBlueFilterActive(false)
   SDL.wm.setIconWin32()
 
@@ -1013,6 +1013,10 @@ function App:fixConfig()
     elseif key == "height" and type(value) == "number" and value < 480 then
       self.config[key] = 480
 
+    -- For scale, check that it is an integer scale >= 1
+    elseif key == "ui_scale" and type(value) == "number" then
+      self.config[key] = math.min(math.floor(value), 1)
+
     elseif (key == "scroll_speed" or key == "shift_scroll_speed") and
         type(value) == "number" then
       if value > 10 then
@@ -1033,6 +1037,12 @@ function App:fixConfig()
       end
       self.config[key] = value
     end
+  end
+
+  -- clamp scale to suitable values for current resolution
+  if self.config.ui_scale * 640 > self.config.width or
+      self.config.ui_scale * 480 > self.config.height then
+    self.config.ui_scale = math.floor(math.min(self.config.width / 640, self.config.height / 480))
   end
 end
 
