@@ -2063,18 +2063,24 @@ function Hospital:searchForHandymanTask(handyman, taskType)
           print("Warning: Orphaned handyman is still assigned a task. Removing.")
           v.assignedHandyman:unassignTask()
         else
-          local assignedDistance = self.world:getPathDistance(v.tile_x, v.tile_y, v.assignedHandyman.tile_x, v.assignedHandyman.tile_y)
-          if assignedDistance ~= false then
-            if v.assignedHandyman.profile.is_consultant then
-              assignedDistance = assignedDistance / 2
-            elseif v.assignedHandyman.profile.is_junior then
-              assignedDistance = assignedDistance * 2
-            end
-            distance = distance * multiplier
-            if distance + 5 > assignedDistance then
-              canContinue = false
-            else
-              distance = distance / multiplier
+          if taskType == "repairing" and v.assignedHandyman:getRoom() then
+            -- Don't take away repair task if assigned handyman already in the target room.
+            canContinue = false
+          else
+            -- Check if handyman are closer to the task than the assigned handyman.
+            local assignedDistance = self.world:getPathDistance(v.tile_x, v.tile_y, v.assignedHandyman.tile_x, v.assignedHandyman.tile_y)
+            if assignedDistance ~= false then
+              if v.assignedHandyman.profile.is_consultant then
+                assignedDistance = assignedDistance / 2
+              elseif v.assignedHandyman.profile.is_junior then
+                assignedDistance = assignedDistance * 2
+              end
+              distance = distance * multiplier
+              if distance + 5 > assignedDistance then
+                canContinue = false
+              else
+                distance = distance / multiplier
+              end
             end
           end
         end
