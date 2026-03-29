@@ -658,13 +658,17 @@ function Object:onClick(ui, button, data)
     end
 
     self.picked_up = true
-    self.world:destroyEntity(self)
-    -- NB: the object has to be destroyed before updating/creating the window,
-    -- or the blueprint will be wrong
     if not window then
+      -- Do not actually delete the object, but make it invisible during the pickup.
+      TheApp.world:gameLog("### Before. self.th:getFlag()): " .. self.th:getFlag() .. " | getVisible: " .. (self.th:isVisible() and "+" or "-"))
+      self.th:makeInvisible()
+      TheApp.world:gameLog("### After.  self.th:getFlag()): " .. self.th:getFlag() .. " | getVisible: " .. (self.th:isVisible() and "+" or "-"))
       window = UIPlaceObjects(ui, object_list, false) -- don't pay for
       ui:addWindow(window)
     else
+      -- NB: the object has to be destroyed before updating/creating the window,
+      -- or the blueprint will be wrong
+      self.world:destroyEntity(self)
       window:stopPickupItems()
       window:addObjects(object_list, false) -- don't pay for
       window:selectObjectType(self.object_type)
