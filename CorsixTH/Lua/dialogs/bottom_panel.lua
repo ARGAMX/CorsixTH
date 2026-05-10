@@ -434,6 +434,24 @@ function UIBottomPanel:sendIncomingMessage(type, message, owner, timeout, defaul
     self.world.ui.adviser:say(_A.information.fax_received)
     self.ui.hospital.message_popup = true
   end
+
+  local --[[persistable:bottom_panel_message_window_close]] function onClose(this_window)
+    local this_window_index
+    for i, window in ipairs(self.message_windows) do
+      -- If icon position found
+      if this_window_index ~= nil then
+        -- Shift all icons that are on the right to the left
+        window:setXLimit(1 + (i - 2) * 30)
+      elseif window == this_window then
+        this_window_index = i
+      end
+    end
+    if this_window then
+      self:deleteMessage(this_window.owner)
+      self:_tryAdvanceQueue(this_window.type)
+    end
+  end
+
   local message_info = {
     type = type,
     message = message,
@@ -448,6 +466,13 @@ function UIBottomPanel:sendIncomingMessage(type, message, owner, timeout, defaul
     if message_info.owner then
       message_info.owner.message = message_info.message
     end
+
+    -- Create the drawer message icon, note this does not show it to the player on creation.
+    local drawer_icon = UIMessage(self.ui, 175, nil,
+      onClose, message_info.type, message_info.message, message_info.owner,
+      message_info.timeout, message_info.default_choice, message_info.callback)
+    message_info["drawer_icon"] = drawer_icon
+
     -- Can display in inbox drawer?
     if not self:_isMessageTypeAlreadyQueued(message_info.type) then
       self:_queueMessage(message_info)
@@ -501,6 +526,14 @@ function UIBottomPanel:_popFromStorageMessage(type)
     end
   end
   return nil
+end
+
+function UIBottomPanel:_message_queue_unshowed_count()
+  local count = 0
+  for _, messages_that_type in pairs(self.message_queue_unshowed) do
+    count = count + #messages_that_type
+  end
+  return count
 end
 
 --[[ A fax can be displayed if the event the fax causes does not affect
@@ -602,6 +635,9 @@ function UIBottomPanel:deleteMessage(owner)
   for i, msg_info in ipairs(self.message_queue) do
     if msg_info.owner == owner then
       -- TODO: restructure message_queue to contain UIMessage objects already, so this special handling isn't required
+      if owner.drawer_icon then
+        owner.drawer_icon:removeMessage()
+      end
       owner.message = nil
       table.remove(self.message_queue, i)
       self:_tryAdvanceQueue(msg_info.type)
@@ -609,10 +645,10 @@ function UIBottomPanel:deleteMessage(owner)
     end
   end
   -- Remove message from botton drawer
-  for _, window in ipairs(self.message_windows) do
-    if window.owner == owner then
-      window:removeMessage()
-      self:_tryAdvanceQueue(window.type)
+  for _, drawer_icon in ipairs(self.message_windows) do
+    if drawer_icon.owner == owner then
+      drawer_icon:removeMessage()
+      self:_tryAdvanceQueue(drawer_icon.type)
       return true
     end
   end
@@ -620,6 +656,9 @@ function UIBottomPanel:deleteMessage(owner)
   for _, messages_group in pairs(self.message_queue_unshowed) do
     for i, msg_info in ipairs(messages_group) do
       if msg_info.owner == owner then
+        if owner.drawer_icon then
+          owner.drawer_icon:removeMessage()
+        end
         owner.message = nil
         table.remove(messages_group, i)
         return true
@@ -632,24 +671,6 @@ end
 --! Pop the message with the given index from the message queue and turn it into an actual
 -- message window; if no index is provided the first message in the queue is popped.
 function UIBottomPanel:_createMessageWindow(show_last)
-  local --[[persistable:bottom_panel_message_window_close]] function onClose(current_window)
-    local index_to_remove
-    for i, window in ipairs(self.message_windows) do
-      -- If icon position found
-      if index_to_remove ~= nil then
-        -- Shift all icons that are on the right to the left
-        window:setXLimit(1 + (i - 2) * 30)
-      elseif window == current_window then
-        index_to_remove = i
-        if window.callback then
-          window.callback()
-        end
-      end
-    end
-    table.remove(self.message_windows, index_to_remove)
-    self:_tryAdvanceQueue(current_window.type)
-  end
-
   if #self.message_queue == 0 then
     return
   end
@@ -658,12 +679,10 @@ function UIBottomPanel:_createMessageWindow(show_last)
   local message_windows = self.message_windows
   local message_info = self.message_queue[index]
 
-  -- Create the message window, note this does not show it to the player on creation.
-  local alert_window = UIMessage(self.ui, 175, 1 + #message_windows * 30,
-    onClose, message_info.type, message_info.message, message_info.owner,
-    message_info.timeout, message_info.default_choice, message_info.callback)
-  message_windows[#message_windows + 1] = alert_window
-  self:addWindow(alert_window)
+  local drawer_icon = message_info.drawer_icon
+  drawer_icon:setXLimit(1 + #message_windows * 30)
+  message_windows[#message_windows + 1] = drawer_icon
+  self:addWindow(drawer_icon)
   self.factory_direction = 1
   self.show_animation = true
   self.factory_counter = -50                -- Delay close of message factory
