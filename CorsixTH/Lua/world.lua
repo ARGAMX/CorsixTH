@@ -2413,6 +2413,22 @@ function World:resetAnimations()
   end
 end
 
+function World:customCleanup()
+  local rooms_count = 0
+  local rooms_with_ghosts = 0
+  local total_ghosts_count = 0
+  for index, room in pairs(self.rooms) do
+    rooms_count = rooms_count + 1
+    local ghost_count = room.door.queue:cleanupExpectHumanoids(room, index)
+    if ghost_count > 0 then
+      rooms_with_ghosts = rooms_with_ghosts + 1
+      total_ghosts_count = total_ghosts_count + ghost_count
+    end
+  end
+  print("==================")
+  print("### Totally rooms checked: " .. rooms_count .. " | Rooms with 'ghosts': " .. rooms_with_ghosts .. " | 'Ghosts' removed from the rooms queue: " .. total_ghosts_count .. " | Well Done!" )
+end
+
 strict_declare_global "staff_initials_cache"
 staff_initials_cache = {}
 

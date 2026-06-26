@@ -318,6 +318,8 @@ function LoadGame(data)
   -- loading a game we should let persistence do it.
   TheApp.world:updateUserActionsAllowed()
   TheApp.world:updateScreenBlueFilter()
+
+  --TheApp.world:customCleanup()
 end
 
 function LoadGameFile(filename)

@@ -53,6 +53,7 @@ end
 --!param callback - register a callback for when queue is 'destroyed'
 function Queue:expect(humanoid, callback)
   if not self.expected[humanoid] then
+    humanoid:expectInQueue(self)
     self.expected[humanoid] = callback
     -- only count patients in the expected count
     if class.is(humanoid, Patient) then
@@ -66,11 +67,87 @@ end
 function Queue:unexpect(humanoid)
   if self.expected[humanoid] then
     self.expected[humanoid] = nil
+    if self == humanoid.expected_queue then
+      humanoid.expected_queue = nil
+    end
     -- only count patients in the expected count
     if class.is(humanoid, Patient) then
       self.expected_count = self.expected_count - 1
     end
   end
+end
+
+function Queue:printExpectHumanoids(dump, door)
+  if self.expected == nil then return end
+  local ghost_count = 0
+  local real_expected_count = 0
+  for humanoid, callback in pairs(self.expected) do
+    if humanoid.tile_x == nil then
+      ghost_count = ghost_count + 1
+      --humanoid:dump()
+    else
+      real_expected_count = real_expected_count + 1
+    end
+    if dump then
+      humanoid:dump()
+    end
+  end
+
+  if ghost_count > 0 then
+    TheApp.world.ui:playSound("FARTFIVE.wav")
+    print("### 🔴 Ghosts count: " .. ghost_count)
+  else
+    if real_expected_count == self.expected_count then
+      print("### ✅ No Ghosts.")
+    else
+      print("### ⚠️  No Ghosts. But 'expected_count' value wrong. was: " .. self.expected_count .. ", real: " .. real_expected_count)
+    end
+  end
+  -- if real_expected_count < self.expected_count then
+  --   self.expected_count = real_expected_count
+  --   if door then
+  --     door:updateDynamicInfo()
+  --   end
+  -- end
+end
+
+function Queue:cleanupExpectHumanoids(room, index)
+  local ghost_count = 0
+  local real_expected_count = 0
+  local found_any = false
+  local expected_array_clone = shallow_clone(self.expected)
+
+  -- print room summary
+  print("====================================================================")
+  print(" Room #" .. index ..  " | x: " .. room.x .. ", y: " .. room.y .. " | Rep-ed: " .. self:expectedSize() .. " | Exp-ed: " .. self:expectedSize() .. " | " .. room.room_info.name)
+
+  for humanoid, callback in pairs(expected_array_clone) do
+    if humanoid.tile_x == nil then
+      found_any = true
+      --local target_id = find_id(self.expected, humanoid)
+      --table.remove(self.expected, target_id)
+      self.expected[humanoid] = nil
+      print("### ❗️ Ghost patient removed: ", humanoid)
+      ghost_count = ghost_count + 1
+    else
+      real_expected_count = real_expected_count + 1
+    end
+  end
+
+  if found_any then
+    print("### ⚠️  Room not OK. Deleted ghost in room: " .. ghost_count .. " | 'expected_count' value was: " .. self.expected_count .. ", real: " .. real_expected_count)
+  else
+    if real_expected_count == self.expected_count then
+      print("### ✔️ Room OK")
+    else
+      print("### ⚠️  No Ghosts. But 'expected_count' value wrong. was: " .. self.expected_count .. ", real: " .. real_expected_count)
+    end
+  end
+  if real_expected_count < self.expected_count then
+    self.expected_count = real_expected_count
+    room.door:updateDynamicInfo()
+  end
+  return ghost_count
 end
 
 --! Lower the max queue length.
@@ -83,6 +160,8 @@ end
 --!param amount (int) Increment length value of the queue.
 function Queue:increaseMaxSize(amount)
   self.max_size = math.min(30, self.max_size + amount)
+
+  self:printExpectHumanoids(true, nil)
 end
 
 function Queue:setBenchThreshold(standing_count)

@@ -111,33 +111,38 @@ function Room:createLeaveAction()
   return WalkAction(x, y):setIsLeaving(true):truncateOnHighPriority()
 end
 
-function Room:createEnterAction(humanoid_entering, callback)
+--! The function creates an action for a humanoid to reach a room and enter it.
+-- Called at the moment when a humanoid is about to find a route to a certain room.
+-- Take into account, in the end the humanoid may never reach the that room.
+--!param humanoid_entering (humanoid) a humanoid who wants to get to the room.
+--!param callback (callback) callback for a case when target room/queue is 'destroyed'.
+function Room:createEnterAction(humanoid, callback)
   local x, y = self:getEntranceXY(true)
   if not callback then
-    if class.is(humanoid_entering, Patient) then
+    if class.is(humanoid, Patient) then
       callback = --[[persistable:room_patient_enroute_cancel]] function()
-        humanoid_entering:setNextAction(SeekRoomAction(self.room_info.id))
+        humanoid:setNextAction(SeekRoomAction(self.room_info.id))
       end
-    elseif class.is(humanoid_entering, Vip) then
+    elseif class.is(humanoid, Vip) then
       callback = --[[persistable:room_vip_enroute_cancel]] function()
-        humanoid_entering:setNextAction(IdleAction())
-        humanoid_entering.waiting = 1
+        humanoid:setNextAction(IdleAction())
+        humanoid.waiting = 1
       end
     else
       callback = --[[persistable:room_humanoid_enroute_cancel]] function()
-        local room = humanoid_entering:getRoom()
+        local room = humanoid:getRoom()
         -- if the room is one we should 'cycle' in, resume that
         -- otherwise staff member will meander in room incorrectly again
-        if room and room.doStaffUseCycle and humanoid_entering.user_of ~= room.door then
-          room:commandEnteringStaff(humanoid_entering)
+        if room and room.doStaffUseCycle and humanoid.user_of ~= room.door then
+          room:commandEnteringStaff(humanoid)
         else
-          humanoid_entering:setNextAction(MeanderAction())
+          humanoid:setNextAction(MeanderAction())
         end
       end
     end
   end
   if self.is_active then
-    self.door.queue:expect(humanoid_entering, {callback = callback})
+    self.door.queue:expect(humanoid, {callback = callback})
   end
 
   return WalkAction(x, y):setIsEntering(true)

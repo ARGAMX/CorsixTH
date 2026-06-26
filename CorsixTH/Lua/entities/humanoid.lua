@@ -1092,6 +1092,7 @@ function Humanoid:tostring()
   end
 
   local result = string.format("%s - class: %s", full_name, class)
+  result = result .. " | x: " .. (self.tile_x and self.tile_x or "nil") .. " y: " .. (self.tile_y and self.tile_y or "nil")
 
   result = result .. string.format("\nWarmth: %.3f   Happiness: %.3f   Fatigue: %.3f  Thirst: %.3f  Toilet_Need: %.3f   Health: %.3f   Service Quality: %.3f",
     self:getAttribute("warmth"),
@@ -1152,6 +1153,25 @@ function Humanoid:unexpectFromRoom(dest_room)
     end
   end
  end
+
+--! Unexpects humanoid from his last target room queue
+function Humanoid:unexpectFromExpectedQueue()
+  if self.expected_queue then
+    self.expected_queue:unexpect(self)
+    self.expected_queue = nil
+    TheApp.world.ui:playSound("MORPH.wav")
+    TheApp.world.ui:playSound("SORRY005.wav")
+  end
+end
+
+--! Expects humanoid to room queue
+--!param queue (queue) target queue the humanoid expected at
+function Humanoid:expectInQueue(queue)
+  -- If humanoid already expected in another queue
+  -- unexpect from that other queue first.
+  self:unexpectFromExpectedQueue()
+  self.expected_queue = queue
+end
 
 -- Get attribute value
 --!param attribute (string)
