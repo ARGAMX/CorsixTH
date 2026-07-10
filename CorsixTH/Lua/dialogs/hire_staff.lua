@@ -33,6 +33,14 @@ function UIHireStaff:UIHireStaff(ui)
   self.height = 323
   self:setDefaultPosition(100, 100)
   self.panel_sprites = ui.app.gfx:loadSpriteTable("QData", "Req11V", true)
+
+  --=== Attention-to-detail 1/4 (START) ===
+  -- Same resources staff_management.lua uses for its attention bar
+  self.staff_bg = ui.app.gfx:loadRaw("Staff01V", 640, 480, "QData", "QData", "Staff01V.pal", true)
+  local staff_palette = ui.app.gfx:getPalette("Staff01V.pal")
+  self.staff_bar_sprites = ui.app.gfx:loadSpriteTable("QData", "Staff02V", true, staff_palette)
+  --=== Attention-to-detail 1/4 (END) ===
+
   self.white_font = ui.app.gfx:loadFontAndSpriteTable("QData", "Font01V", nil, nil, { apply_ui_scale = true })
   self.face_parts = ui.app.gfx:loadRaw("Face01V", 65, 1350, nil, "Data", "MPalette.dat", false, { flags = DrawFlags.Nearest })
 
@@ -94,6 +102,11 @@ function UIHireStaff:UIHireStaff(ui)
   self:makeTooltip(_S.tooltip.hire_staff_window.psychiatrist, 137, 136, 164, 167)
   self:makeTooltip(_S.tooltip.hire_staff_window.researcher, 164, 136, 191, 167)
 
+  --=== Attention-to-detail 2/4 (START) ===
+  -- Hover region over the attention-to-detail bar (region index 7)
+  self:makeTooltip("Attention to Detail", 82, 114, 136, 131)
+  --=== Attention-to-detail 2/4 (END) ===
+
   self:updateTooltips()
   self:registerKeyHandlers()
 end
@@ -106,6 +119,10 @@ end
 function UIHireStaff:updateTooltips()
   local cond = not not self.category
   self.tooltip_regions[1].enabled = cond
+
+  --=== Attention-to-detail 3/4 (START) ===
+  self.tooltip_regions[7].enabled = cond
+  --=== Attention-to-detail 3/4 (END) ===
 
   cond = cond and self.category == "Doctor"
   self.tooltip_regions[2].enabled = cond
@@ -191,6 +208,38 @@ function UIHireStaff:draw(canvas, x, y)
         end
       end
     end
+
+    --=== Attention-to-detail 4/4 (START) ===
+    -- Attention-to-detail bar: pill from the staff-management art, tucked under the skill bar (all staff)
+    if self.skill_bg_panel.visible then
+      -- {bitmap_y, bitmap_x, width} spans of the pill, base point (147,371) in Staff01V
+      local PILL_SPANS = {
+        {385,174,46},{386,173,48},{387,172,50},{388,172,50},
+        {389,172,3},{389,176,46},{390,172,50},{391,172,49},
+        {392,173,47},{393,175,45},
+        {394,177,3},{394,188,1},{394,197,3},{394,208,1},{394,217,3},
+        {395,177,43},{396,178,41},{397,179,39},
+      }
+
+      local dest_x = x + 59 * s
+      local dest_y = y + 102 * s
+
+      canvas:scale(s, "bitmap")
+      for _, sp in ipairs(PILL_SPANS) do
+        self.staff_bg:draw(canvas, dest_x + (sp[2] - 147) * s, dest_y + (sp[1] - 371) * s, sp[2], sp[1], sp[3], 1)
+      end
+      canvas:scale(1, "bitmap")
+
+      -- blue fill (bitmap fill point 178,387 -> base + 31,16)
+      local att_width = math.floor(profile.attention_to_detail * 40 * s + 0.5)
+      if att_width > 0 then
+        for dx = 0, att_width - 1, s do
+          self.staff_bar_sprites:draw(canvas, 13, dest_x + 31 * s + dx, dest_y + 16 * s, { scaleFactor = s })
+        end
+      end
+    end
+    --=== Attention-to-detail 4/4 (END) ===
+
     if self.category == "Doctor" then
       -- Junior / Doctor / Consultant marker
       self.panel_sprites:draw(canvas, 258, x + 71 * s, y + 49 * s, { scaleFactor = s })

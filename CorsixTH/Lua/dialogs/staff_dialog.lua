@@ -75,6 +75,14 @@ function UIStaff:UIStaff(ui, staff)
   end
   self:setDefaultPosition(-20, 30)
   self.panel_sprites = app.gfx:loadSpriteTable("QData", "Req01V", true)
+
+  --=== Attention-to-detail 1/3 (START) ===
+  -- Same resources staff_management.lua uses for its attention bar
+  self.staff_bg = app.gfx:loadRaw("Staff01V", 640, 480, "QData", "QData", "Staff01V.pal", true)
+  local staff_palette = app.gfx:getPalette("Staff01V.pal")
+  self.staff_bar_sprites = app.gfx:loadSpriteTable("QData", "Staff02V", true, staff_palette)
+  --=== Attention-to-detail 1/3 (END) ===
+
   self.white_font = app.gfx:loadFontAndSpriteTable("QData", "Font01V", nil, nil, { apply_ui_scale = true })
   self.face_parts = app.gfx:loadRaw("Face01V", 65, 1350, nil, "Data", "MPalette.dat", false, { flags = DrawFlags.Nearest })
 
@@ -119,6 +127,11 @@ function UIStaff:UIStaff(ui, staff)
   self:makeTooltip(_S.tooltip.staff_window.happiness, 113,  49, 204,  74)
   self:makeTooltip(_S.tooltip.staff_window.tiredness, 113,  74, 204, 109)
   self:makeTooltip(_S.tooltip.staff_window.ability,   113, 109, 204, 134)
+
+  --=== Attention-to-detail 2/3 (START) ===
+  -- Hover region over the attention-to-detail pill (all staff)
+  self:makeTooltip("Attention to Detail", 133, 130, 184, 144)
+  --=== Attention-to-detail 2/3 (END) ===
 
   if class.is(staff, Doctor) then
     self:makeTooltip(_S.tooltip.staff_window.doctor_seniority, 30, 141, 111, 182)
@@ -227,6 +240,34 @@ function UIStaff:draw(canvas, x_, y_)
       self.panel_sprites:draw(canvas, 350, x + 139 * s + dx, y + 120 * s, { scaleFactor = s })
     end
   end
+
+  --=== Attention-to-detail 3/3 (START) ===
+  -- Attention-to-detail pill under the skill bar (same art as hire dialog / staff management)
+  do
+    local PILL_SPANS = {
+      {385,174,46},{386,173,48},{387,172,50},{388,172,50},
+      {389,172,3},{389,176,46},{390,172,50},{391,172,49},
+      {392,173,47},{393,175,45},
+      {394,177,3},{394,188,1},{394,197,3},{394,208,1},{394,217,3},
+      {395,177,43},{396,178,41},{397,179,39},
+    }
+    local dest_x = x + 108 * s
+    local dest_y = y + 117 * s  -- same spot for all staff, under the skill bar
+
+    canvas:scale(s, "bitmap")
+    for _, sp in ipairs(PILL_SPANS) do
+      self.staff_bg:draw(canvas, dest_x + (sp[2] - 147) * s, dest_y + (sp[1] - 371) * s, sp[2], sp[1], sp[3], 1)
+    end
+    canvas:scale(1, "bitmap")
+
+    local att_width = math.floor(profile.attention_to_detail * 40 * s + 0.5)
+    if att_width > 0 then
+      for dx = 0, att_width - 1, s do
+        self.staff_bar_sprites:draw(canvas, 13, dest_x + 31 * s + dx, dest_y + 16 * s, { scaleFactor = s })
+      end
+    end
+  end
+  --=== Attention-to-detail 3/3 (END) ===
 
   if class.is(self.staff, Doctor) then
     -- Junior / Doctor / Consultant marker
