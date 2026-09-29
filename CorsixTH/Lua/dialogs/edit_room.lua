@@ -226,6 +226,32 @@ function UIEditRoom:confirm(force)
     self.phase = "clear_area"
     self:clearArea()
   elseif self.phase == "clear_area" then
+    local mode = self.ui.app.config.blocking_off_areas
+    local valid
+    if mode == 1 then
+      valid = self:_withBlockedRoomBlueprint(function()
+        return self:checkReachability()
+      end)
+    else
+      -- This is the last check before finishRoom() makes the topology real.
+      valid = self:_isRoomPlacementNetworkValid({
+        check_humanoids = true,
+        include_door = true,
+      })
+    end
+
+    if mode == 3 then
+      if not valid then
+        TheApp.world:gameLog("Blocking off areas is allowed with room " ..
+          self.blueprint_rect.x .. ", " .. self.blueprint_rect.y .. ".")
+      end
+    elseif not valid then
+      self:cancel()
+      self.ui:playSound("wrong2.wav")
+      self.ui.adviser:say(_A.room_forbidden_non_reachable_parts)
+      return
+    end
+
     self.ui:setDefaultCursor(nil)
     self.phase = "objects"
     self:finishRoom()
@@ -848,6 +874,7 @@ function UIEditRoom:checkReachability()
   local flags = {}
 
   local function check(flag)
+    if not world:isOnMap(x, y) then return true end
     if map:getCellFlags(x, y, flags).passable and flags[flag] then
       if prev_x and not world:getPathDistance(prev_x, prev_y, x, y) then
         return false
@@ -880,33 +907,216 @@ function UIEditRoom:checkReachability()
   return true
 end
 
+
+-- Run a callback and always restore the temporary topology before returning or
+-- propagating an error.
+local function runWithTopologyRollback(callback, rollback)
+  local ok, result = pcall(callback)
+  rollback()
+  if not ok then error(result) end
+  return result
+end
+
+-- Run a pathfinding query with the room footprint treated as a solid barrier,
+-- restoring the exact passable state afterwards even if the query errors.
+function UIEditRoom:_withBlockedRoomBlueprint(callback)
+  local rect = self.blueprint_rect
+  local map = self.ui.app.map.th
+  local old_passable = {}
+
+  for y = rect.y, rect.y + rect.h - 1 do
+    old_passable[y] = {}
+    for x = rect.x, rect.x + rect.w - 1 do
+      old_passable[y][x] = map:getCellFlags(x, y).passable
+      map:setCellFlags(x, y, {passable = false})
+    end
+  end
+
+  return runWithTopologyRollback(callback, function()
+    for y = rect.y, rect.y + rect.h - 1 do
+      for x = rect.x, rect.x + rect.w - 1 do
+        map:setCellFlags(x, y, {passable = old_passable[y][x]})
+      end
+    end
+  end)
+end
+
+-- Run a pathfinding query with the prospective room perimeter walls and
+-- selected door applied, restoring every changed directional flag afterwards.
+-- Room floor passability is left unchanged because markRoom() restores the
+-- blueprint floor passability before the finished room becomes usable.
+function UIEditRoom:_withProspectiveRoomTopology(callback)
+  local rect = self.blueprint_rect
+  local map = self.ui.app.map.th
+  local world = self.ui.app.world
+  local changed_flags = {}
+  local changed_order = {}
+
+  local function setFlag(x, y, flag, value)
+    if not world:isOnMap(x, y) then return end
+    local key = x .. ":" .. y .. ":" .. flag
+    if not changed_flags[key] then
+      changed_flags[key] = {
+        x = x,
+        y = y,
+        flag = flag,
+        value = map:getCellFlags(x, y)[flag],
+      }
+      changed_order[#changed_order + 1] = key
+    end
+    local flags = {}
+    flags[flag] = value
+    map:setCellFlags(x, y, flags)
+  end
+
+  local function closeWall(x, y, direction)
+    if direction == "north" then
+      setFlag(x, y, "travelNorth", false)
+      setFlag(x, y - 1, "travelSouth", false)
+    else -- west
+      setFlag(x, y, "travelWest", false)
+      setFlag(x - 1, y, "travelEast", false)
+    end
+  end
+
+  local function applyProspectiveWalls()
+    -- finishRoom() creates both wall directions at the top-left corner. Every
+    -- other blueprint wall anim becomes a wall except the real door/master panel.
+    for x, column in pairs(self.blueprint_wall_anims) do
+      for y, anim in pairs(column) do
+        if x == rect.x and y == rect.y then
+          closeWall(x, y, "north")
+          closeWall(x, y, "west")
+        else
+          local tag = anim:getTag()
+          if tag ~= "door" and tag ~= "swing_master" then
+            closeWall(x, y, (anim:getFlag() % 2 == 1) and "west" or "north")
+          end
+        end
+      end
+    end
+    return callback()
+  end
+
+  return runWithTopologyRollback(applyProspectiveWalls, function()
+    for i = #changed_order, 1, -1 do
+      local saved = changed_flags[changed_order[i]]
+      local flags = {}
+      flags[saved.flag] = saved.value
+      map:setCellFlags(saved.x, saved.y, flags)
+    end
+  end)
+end
+
+-- Return the corridor-side tile beside the currently selected blueprint door.
+function UIEditRoom:_getBlueprintDoorOutsideTile()
+  local door = self.blueprint_door
+  if not door or not door.wall or not door.x or not door.y then return end
+
+  local x, y = door.x, door.y
+  local other_x, other_y = x, y
+  if door.wall == "west" then
+    other_x = other_x - 1
+  else -- north
+    other_y = other_y - 1
+  end
+
+  local rect = self.blueprint_rect
+  local function inside(tile_x, tile_y)
+    return rect.x <= tile_x and tile_x < rect.x + rect.w and
+        rect.y <= tile_y and tile_y < rect.y + rect.h
+  end
+
+  if inside(x, y) then
+    return other_x, other_y
+  end
+  return x, y
+end
+
+-- Return corridor tiles bordering the prospective room. These are sufficient
+-- to detect whether closing the room perimeter newly splits the surrounding
+-- corridor into separate components.
+function UIEditRoom:_getProspectiveRoomBoundaryTiles()
+  local rect = self.blueprint_rect
+  local tiles = {}
+  for x = rect.x, rect.x + rect.w - 1 do
+    tiles[#tiles + 1] = {x = x, y = rect.y - 1}
+    tiles[#tiles + 1] = {x = x, y = rect.y + rect.h}
+  end
+  for y = rect.y, rect.y + rect.h - 1 do
+    tiles[#tiles + 1] = {x = rect.x - 1, y = y}
+    tiles[#tiles + 1] = {x = rect.x + rect.w, y = y}
+  end
+  return tiles
+end
+
+-- Check prospective room walls. Candidate door connectivity is always checked,
+-- while existing protected endpoints are inspected only after an actual impact.
+function UIEditRoom:_isRoomPlacementNetworkValid(options)
+  options = options or {}
+  local world = self.ui.app.world
+  local candidate_tiles
+
+  if options.include_door then
+    local x, y = self:_getBlueprintDoorOutsideTile()
+    if not x then return false end
+    candidate_tiles = {{x = x, y = y}}
+  end
+
+  local unsafe, has_normal_spawns =
+    world:_wouldBlockingOffAreaTopologyBeUnsafe({
+      boundary_tiles = self:_getProspectiveRoomBoundaryTiles(),
+      candidate_tiles = candidate_tiles,
+      check_existing = options.check_humanoids,
+      protected_options = {
+        ignored_room = self.room,
+        check_humanoids = options.check_humanoids,
+      },
+      with_candidate_topology = function(callback, before_candidate)
+        local baseline = before_candidate and before_candidate()
+        return self:_withProspectiveRoomTopology(function()
+          return callback(baseline)
+        end)
+      end,
+    })
+
+  if has_normal_spawns then return unsafe == false end
+
+  local strict_valid = self:_withBlockedRoomBlueprint(function()
+    return self:checkReachability()
+  end)
+  return strict_valid and unsafe ~= true
+end
+
+-- Candidate doors are protected endpoints and must never be accepted by a
+-- vacuous empty-ingress test.
+function UIEditRoom:_isBlueprintDoorNetworkValid()
+  return self:_isRoomPlacementNetworkValid({include_door = true})
+end
+
 function UIEditRoom:enterDoorPhase()
   self.ui:tutorialStep(3, 8, 9)
   local rect = self.blueprint_rect
   local map = self.ui.app.map.th
+  local mode = self.ui.app.config.blocking_off_areas
 
-  -- make tiles impassable
-  self:_setCellFlagsOnBlueprint({passable = false})
-
-  -- check if all adjacent tiles of the rooms are still connected
-  if not self:checkReachability() then
-    if self.ui.app.config.blocking_off_areas == 3 then
-      -- all-permissive placing approach
-      -- This could lead to crashes, so we'll record this in the log so that during investigation
-      -- we'll be able to know that safe placement was disabled.
-      TheApp.world:gameLog("Blocking off areas is allowed with room " .. self.blueprint_rect.x .. ", " .. self.blueprint_rect.y .. ".")
-    else
-      -- undo passable flags and go back to walls phase
-      self.phase = "walls"
-      self:returnToWallPhase(true)
-      self.ui:playSound("wrong2.wav")
-      self.ui.adviser:say(_A.room_forbidden_non_reachable_parts)
-      return
-    end
+  local valid = true
+  if mode ~= 2 and mode ~= 3 then
+    -- Totally-forbidden mode retains the legacy strict behavior. Mode 2 is
+    -- checked once a real candidate door exists, because that opening is part
+    -- of the prospective final topology.
+    valid = self:_withBlockedRoomBlueprint(function()
+      return self:checkReachability()
+    end)
   end
 
-  -- make tiles passable back
-  self:_setCellFlagsOnBlueprint({passable = true})
+  if not valid then
+    self.phase = "walls"
+    self:returnToWallPhase(true)
+    self.ui:playSound("wrong2.wav")
+    self.ui.adviser:say(_A.room_forbidden_non_reachable_parts)
+    return
+  end
 
   self.desc_text = _S.place_objects_window.place_door
   self.confirm_button:enable(false) -- Confirmation is via placing door
@@ -1058,7 +1268,12 @@ function UIEditRoom:onLeftButtonDown(x, y)
       end
     end
   elseif self.phase == "door" then
-    if self.blueprint_door.valid then
+    local valid = self.blueprint_door.valid
+    if valid and self.ui.app.config.blocking_off_areas == 2 then
+      -- The ghost may be stale by the time the player clicks.
+      valid = self:_isBlueprintDoorNetworkValid()
+    end
+    if valid then
       self.ui:playSound("buildclk.wav")
       self:confirm(true)
     else
@@ -1223,6 +1438,7 @@ end
 --!param world - reference to world object instance
 --!return (boolean) whether the tile is considered to be valid.
 local function validDoorTile(xpos, ypos, player_id, world)
+  if not world:isOnMap(xpos, ypos) then return false end
   local th = TheApp.map.th
   local tile_flags = th:getCellFlags(xpos, ypos)
   -- check own it
@@ -1356,6 +1572,13 @@ function UIEditRoom:setDoorBlueprint(orig_x, orig_y, orig_wall)
         not validDoorTile(x2 - dx, y2 - dy, player_id, world) then
       invalid_tile = bitOr(invalid_tile, 2)
     end
+  end
+
+  if invalid_tile == 0 and self.ui.app.config.blocking_off_areas == 2 and
+      not self:_isBlueprintDoorNetworkValid() then
+    -- Mark all three panels of a swing door invalid; ordinary doors use the
+    -- existing centre-door invalid bit.
+    invalid_tile = bitOr(invalid_tile, self.room_type.swing_doors and 14 or 4)
   end
 
   self.blueprint_door.valid = (invalid_tile == 0)

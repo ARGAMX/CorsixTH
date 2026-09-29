@@ -116,12 +116,32 @@ function UIPlaceStaff:_isValidStaffPlacement()
   local staffable = (self.allow_in_rooms or flag_cache.roomId == 0)
   -- Or is it a receptionist placed on an unstaffed reception desk?
   local reception = false
+  local reception_desk
   if self.profile:isType("Receptionist") then
-    local desk = world:getObject(x, y, "reception_desk", true) or
+    reception_desk = world:getObject(x, y, "reception_desk", true) or
         world:findObjectNear(self, "reception_desk", 0, true)
-    reception = desk and not desk.receptionist
+    reception = reception_desk and not reception_desk.receptionist
   end
-  return (walkable and staffable) or reception
+
+  local valid = (walkable and staffable) or reception
+  if not valid then return false end
+
+  -- Manual staff placement may never deliberately create a trapped humanoid,
+  -- even in blocking_off_areas = 3. Receptionists stand at the desk's
+  -- secondary usage tile rather than on its solid base tile.
+  local network_x, network_y = x, y
+  if reception then
+    network_x, network_y = reception_desk:getSecondaryUsageTile()
+  end
+  local ingress_tiles = world:getBlockingOffAreaIngressTiles()
+  if #ingress_tiles == 0 then
+    -- There is no ingress network to compare against. Preserve the local
+    -- placement result on special/malformed maps rather than treating an empty
+    -- anchor set as either universally reachable or blocked.
+    return true
+  end
+  return world:isTileConnectedToBlockingOffAreaIngress(
+    network_x, network_y, ingress_tiles)
 end
 
 function UIPlaceStaff:draw(canvas)
