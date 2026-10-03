@@ -382,6 +382,18 @@ bool sound_player::is_playing(uint32_t handle) {
   return playing_channel_for_handle(handle) >= 0;
 }
 
+void sound_player::set_gain(uint32_t handle, float volume) {
+  // Resolve the channel first. playing_channel_for_handle takes and releases
+  // channel_mutex itself, which must not be held while calling SDL_mixer as
+  // that has its own lock (see the remark on channel_mutex).
+  int channel = playing_channel_for_handle(handle);
+  if (channel < 0) {
+    return;
+  }
+  MIX_SetTrackGain(th::sound::get_mixer()->get_fx_track(channel),
+                   th::sound::linear_to_logarithmic_volume(volume));
+}
+
 void sound_player::set_sound_effect_volume(float volume) {
   sound_effect_volume = volume;
 }

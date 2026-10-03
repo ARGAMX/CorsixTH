@@ -328,6 +328,13 @@ int l_soundfx_is_playing(lua_State* L) {
   return 1;
 }
 
+int l_soundfx_set_gain(lua_State* L) {
+  sound_player* pEffects = luaT_testuserdata<sound_player>(L);
+  pEffects->set_gain(static_cast<uint32_t>(luaL_checkinteger(L, 2)),
+                     static_cast<float>(luaL_checknumber(L, 3)));
+  return 0;
+}
+
 int l_soundfx_set_camera(lua_State* L) {
   sound_player* pEffects = luaT_testuserdata<sound_player>(L);
   pEffects->set_camera(static_cast<int>(luaL_checkinteger(L, 2)),
@@ -377,6 +384,7 @@ void lua_register_sound(const lua_register_state* pState) {
     lcb.add_function(l_soundfx_toggle_pause, "togglePause");
     lcb.add_function(l_soundfx_stop, "stop");
     lcb.add_function(l_soundfx_is_playing, "isPlaying");
+    lcb.add_function(l_soundfx_set_gain, "setGain");
     lcb.add_function(l_soundfx_set_sound_volume, "setSoundVolume");
     lcb.add_function(l_soundfx_set_sound_effects_on, "setSoundEffectsOn");
     lcb.add_function(l_soundfx_set_camera, "setCamera");

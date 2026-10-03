@@ -227,6 +227,17 @@ class sound_player {
   //! Returns whether the sound matching the given handle is playing
   bool is_playing(uint32_t handle);
 
+  //! Sets the volume of a sound that is already playing.
+  //!
+  //! The volume is absolute, so it replaces the volume the sound was started
+  //! with rather than scaling relative to it. It does not affect the default
+  //! volume used for subsequently played sounds.
+  //!
+  //! \param handle The sound to change the volume of. Does nothing if the sound
+  //!        is not playing.
+  //! \param volume Volume to play the sound at, in the range 0.0 to 1.0.
+  void set_gain(uint32_t handle, float volume);
+
   //! Sets the default volume for sound effects.
   void set_sound_effect_volume(float volume);
 
