@@ -400,6 +400,23 @@ function Audio:isPlaying(sound)
   return false
 end
 
+--! Set the volume of a sound that is already playing.
+-- The volume is absolute, so it replaces the volume the sound was started with
+-- rather than scaling relative to it. The default volume used for sounds played
+-- later on is not affected.
+--!param sound (table) The `sound` table returned by `Audio:playSound`.
+--!param volume (number) The new volume, in the range 0.0 to 1.0.
+function Audio:setSoundGain(sound, volume)
+  local sound_fx = self.sound_fx
+  if not sound_fx then
+    return
+  end
+
+  if sound and sound.handle then
+    sound_fx:setGain(sound.handle, volume)
+  end
+end
+
 function Audio:cacheSoundFilenamesAssociatedWithName(name)
   local list = wilcard_cache[name]
   if not list then

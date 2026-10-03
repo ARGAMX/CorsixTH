@@ -28,7 +28,7 @@ local SDL = require("sdl")
 -- and add compatibility code in afterLoad functions
 -- Recommended: Also replace/Update the summary comment
 
-local SAVEGAME_VERSION = 267 -- remove litter layering
+local SAVEGAME_VERSION = 268 -- add the crowd ambience
 
 class "App"
 
@@ -699,6 +699,11 @@ function App:initLanguage()
 end
 
 function App:worldExited()
+  -- The crowd ambience loop holds a sound channel until it is stopped, so it
+  -- has to be released before the interface is thrown away.
+  if self.ui and self.ui.ambience then
+    self.ui.ambience:destroy()
+  end
   self.audio:clearCallbacks()
 end
 

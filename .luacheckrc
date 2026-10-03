@@ -30,6 +30,9 @@ globals = { -- Globals
             "pause_gc_and_use_weak_keys", "permanent",
             "rangeMapLookup", "rnc", "strict_declare_global",
             "unpermanent", "values", "serialize",
+            "approach_volume", "count_visible_humanoids", "crowd_volume",
+            "zoom_attenuation",
+
             "array_join", "table_merge", "table_contains", "shallow_clone",
             "staff_initials_cache", "hasBit", "bitOr", "inspect",
             "getRandomEntryFromArray", "isTableEmpty",

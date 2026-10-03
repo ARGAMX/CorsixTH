@@ -19,6 +19,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. --]]
 
 corsixth.require("ui")
+corsixth.require("ambience")
 corsixth.require("announcer")
 
 --! Variant of UI for running games
@@ -30,6 +31,7 @@ local GameUI = _G["GameUI"]
 local TH = require("TH")
 
 local Announcer = _G["Announcer"]
+local Ambience = _G["Ambience"]
 
 -- Factor to multiply pinch_zoom scale by, bigger number results in
 -- faster zoom changes
@@ -104,6 +106,12 @@ function GameUI:GameUI(app, local_hospital, map_editor)
 
   self.speed_up_key_pressed = false
   self.last_hovered_entity = nil
+
+  -- The looping crowd ambience, which follows the size of the crowd in view.
+  -- Only for the player's own hospital, and not for the map editor.
+  if not self.map_editor then
+    self.ambience = Ambience(app, self, local_hospital)
+  end
 
   -- The currently specified intensity value for earthquakes. To abstract
   -- the effect from the implementation this value is a number between 0
@@ -943,6 +951,12 @@ function GameUI:onTick()
 
   self.announcer:onTick()
 
+  -- After scrolling, so that the crowd volume reflects the new view in the same
+  -- frame that the view moved.
+  if self.ambience then
+    self.ambience:update()
+  end
+
   return repaint
 end
 
@@ -1356,8 +1370,19 @@ function GameUI:afterLoad(old, new)
   if old < 264 then
     self.multigesturemove = nil
   end
+  if old < 268 then
+    -- Savegames from before the crowd ambience have no ambience of their own,
+    -- so build one for them here.
+    if not self.map_editor and not self.ambience then
+      self.ambience = Ambience(self.app, self, self.hospital)
+    end
+  end
 
   self.announcer.playing = false
+
+  if self.ambience then
+    self.ambience:onSavegameLoaded()
+  end
 
   self.app:setCaptureMouse()
   return UI.afterLoad(self, old, new)
