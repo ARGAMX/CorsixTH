@@ -54,6 +54,63 @@ end
 --! Finds a relevant diagnosis/treatment room(s) for a patient
 --! If diagnosis room, attempt to use GP's choice first, else select any other available
 --! room at random.
+--[[ TEMPORARY INVESTIGATION INSTRUMENTATION - issue #2210, NOT FOR COMMIT
+  Reports diagnosis room substitutions, where agreesToPay() was checked for one
+  room and the patient is walked to another. Removed before committing.
+--]]
+local seek_room_report = permanent"seek_room_report"( function(action, humanoid, chosen_room, original_room)
+  local hosp = humanoid.hospital
+  -- Identified by the serial assigned in World:newEntity. Tile position is not
+  -- usable: the patient walks between the decision and the report.
+  local disease = humanoid.disease and humanoid.disease.name or "unknown"
+  -- Patients restored from a save never passed through World:newEntity, so the
+  -- serial may be absent. Assign one now if so.
+  if not humanoid.serial and humanoid.world then
+    humanoid.world.entity_serial = (humanoid.world.entity_serial or 0) + 1
+    humanoid.serial = humanoid.world.entity_serial
+  end
+
+  -- What the patient agreed to, and what they will actually be charged. The
+  -- charge comes from getTreatmentDiseaseId(), which uses the room the patient
+  -- is standing in - not the room that was agreed.
+  local agreed_id = "diag_" .. tostring(original_room)
+  local charged_id = "diag_" .. tostring(chosen_room)
+  local agreed_ok, agreed_price = pcall(hosp.getTreatmentPrice, hosp, agreed_id)
+  local charged_ok, charged_price = pcall(hosp.getTreatmentPrice, hosp, charged_id)
+  agreed_price = agreed_ok and agreed_price or "?"
+  charged_price = charged_ok and charged_price or "?"
+
+  local function price_of(id)
+    local book = hosp.disease_casebook[id]
+    return book and book.price or "?"
+  end
+
+  print(string.format(
+    "[#2210] DIAGNOSIS ROOM SUBSTITUTION"))
+  print(string.format(
+    "[#2210]   patient    : serial %s", tostring(humanoid.serial)))
+  print(string.format(
+    "[#2210]   disease    : %s", disease))
+  print(string.format(
+    "[#2210]   disease id : %s", humanoid.disease and humanoid.disease.id or "?"))
+  print(string.format(
+    "[#2210]   agreed room: %s (price %s, policy %s)",
+    tostring(original_room), tostring(agreed_price), tostring(price_of(agreed_id))))
+  print(string.format(
+    "[#2210]   sent to    : %s (price %s, policy %s)",
+    tostring(chosen_room), tostring(charged_price), tostring(price_of(charged_id))))
+  print(string.format(
+    "[#2210]   pay_amount : %s  <- agreed figure, unused by the diagnosis fee",
+    tostring(humanoid.pay_amount)))
+  print(string.format(
+    "[#2210]   NOTE: no agreesToPay() check was made for the room actually used."))
+
+  -- Audible cue: reproduction confirmed.
+  if TheApp.world and TheApp.world.ui then
+    TheApp.world.ui:playSound("DICE122M.wav")
+  end
+end)
+
 local action_seek_room_find_room = permanent"action_seek_room_find_room"( function(action, humanoid)
   local room_type = action.room_type
   if action.diagnosis_room then
@@ -64,6 +121,12 @@ local action_seek_room_find_room = permanent"action_seek_room_find_room"( functi
     end
 
     local diagnosis_rooms = humanoid.available_diagnosis_rooms
+    -- TEMPORARY INVESTIGATION (#2210): remember the room the patient agreed to pay
+    -- for, so the substitution below can be reported against it.
+    local original_room = room_type
+    if action.diagnosis_room and diagnosis_rooms[action.diagnosis_room] then
+      original_room = diagnosis_rooms[action.diagnosis_room]
+    end
     -- Make numbers for each available diagnosis room. A random index from this list will be chosen,
     -- and then the corresponding room index is taken as next room. (The list decreases for each room
     -- missing)
@@ -87,6 +150,11 @@ local action_seek_room_find_room = permanent"action_seek_room_find_room"( functi
           end
         end
         action.room_type = room_type
+        -- TEMPORARY INVESTIGATION (#2210): report a substitution away from the
+        -- room agreesToPay() was checked against.
+        if room_type ~= original_room then
+          seek_room_report(action, humanoid, room_type, original_room)
+        end
         return room
       else
         -- Remove the index of this room from the list of indices available in available_diagnosis_rooms

@@ -1824,6 +1824,20 @@ function World:newEntity(class, animation, mood_marker)
   local th = TH.animation()
   th:setAnimation(self.anims, animation)
   local entity = _G[class](th)
+  -- TEMPORARY INVESTIGATION (#2210, NOT FOR COMMIT): give every entity a stable
+  -- sequence number. Patients have no name and no id, and their tile changes as
+  -- they walk, so neither can identify one in a log.
+  self.entity_serial = (self.entity_serial or 0) + 1
+  entity.serial = self.entity_serial
+  -- Entities restored from a savegame never pass through newEntity, so give them
+  -- a serial lazily instead. The counter is shared with the world so numbers stay
+  -- unique across both paths.
+  if not self.next_entity_serial then
+    self.next_entity_serial = function(self_world)
+      self_world.entity_serial = (self_world.entity_serial or 0) + 1
+      return self_world.entity_serial
+    end
+  end
   if not table_contains(self.entities, entity) then
     self.entities[#self.entities + 1] = entity
   end
