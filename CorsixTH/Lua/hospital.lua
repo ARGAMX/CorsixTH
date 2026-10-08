@@ -1433,7 +1433,10 @@ function Hospital:receiveMoneyForTreatment(patient)
 
     -- 25% of the payments now go through insurance
     if patient.insurance_company then
-      self:addInsuranceMoney(patient.insurance_company, amount)
+      -- Name the insurer's payment rather than repeating the treatment, so the
+      -- line fits the statement's details column.
+      local billed = _S.transactions.insurance_colon .. " " .. casebook.disease.name
+      self:addInsuranceMoney(patient.insurance_company, amount, billed)
     else
       -- patient is paying normally (but still, he could feel like it's
       -- under- or over-priced and it could impact happiness and reputation)
@@ -1468,9 +1471,29 @@ function Hospital:getTreatmentPrice(disease)
   end
 end
 
-function Hospital:addInsuranceMoney(company, amount)
+--[[ Records money an insurance company owes for a treatment.
+
+  The amount is not paid here. It joins the company's balance and reaches the
+  hospital some months later, as one lump on the statement. Logging it now says
+  what the player just watched float above the patient, without pretending the
+  money is already held: the balance and the money in total are left alone, and
+  the statement leaves the money columns empty because neither of them has
+  changed.
+
+  The entry is marked with an 'insurance' amount so that a statement reader can
+  tell a billing apart from a transaction that moved money. Neither the balance
+  nor the money in or out totals include it.
+
+  !param company (integer) Index of the insurance company that owes the money.
+  !param amount (integer) The amount owed.
+  !param reason (string) What the money is for, from _S.transactions.
+  ]]
+function Hospital:addInsuranceMoney(company, amount, reason)
   local old_balance = self.insurance_balance[company][1]
   self.insurance_balance[company][1] = old_balance + amount
+  if not self.world.free_build_mode then
+    self:logTransaction({insurance = amount, desc = reason})
+  end
 end
 
 function Hospital:receiveMoneyForProduct(patient, amount, reason)

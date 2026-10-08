@@ -264,9 +264,12 @@ function UIBankManager:draw(canvas, x, y)
       local current_y = no * 15 * s + y + 60 * s
       font:draw(canvas, _S.date_format.daymonth:format(values.day, values.month), x + 48 * s, current_y)
       font:draw(canvas, values.desc, x + 129 * s, current_y)
+      -- Money owed by an insurer is neither in nor out: it has not arrived, so
+      -- both money columns are left empty and only the balance shows a figure,
+      -- unchanged from the line above.
       if values.spend then
         font:draw(canvas, "$ " .. math.floor(values.spend), x + 377 * s, current_y)
-      else
+      elseif values.receive then
         font:draw(canvas, "$ " .. math.floor(values.receive), x + 453 * s, current_y)
       end
       font:draw(canvas, "$ " .. math.floor(values.balance), x + 529 * s, current_y)
