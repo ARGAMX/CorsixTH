@@ -19,8 +19,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. --]]
 
 corsixth.require("announcer")
+corsixth.require("reputation")
 
 local AnnouncementPriority = _G["AnnouncementPriority"] --[[@as AnnouncementPriority]]
+
+---@type ReputationAccount
+local ReputationAccount = _G["ReputationAccount"]
 
 class "Epidemic"
 
@@ -48,12 +52,15 @@ function Epidemic:Epidemic(hospital, contagious_patient)
 
   -- Various values for the different outcomes - used when result fax is sent
   self.declare_fine = 0
-  self.reputation_hit = 0
   self.coverup_fine = 0
   self.compensation = 0
 
   -- Is the epidemic bad enough to deserve the whole hospital to be evacuated
   self.will_be_evacuated = false
+
+  -- Did the inspector's verdict land on one of the two severities the original
+  -- penalises, rather than on a minor failure or being cleared?
+  self.inspector_failure = false
 
   -- Fax sent when the result of the cover up is revealed to the player
   self.cover_up_result_fax = {}
@@ -356,15 +363,9 @@ function Epidemic:calculateInfectedFine(infected_count)
   return math.max(2000, infected_count * fine_per_infected)
 end
 
---[[ Gets the amount of reputation to add/remove from the player
- based on a given fine. Reputation gain/loss isn't specified
- in the configs so we use a percentage of the fine as a base
- value with extra being gained/lost for specific circumstances.
- @param fine_amount (Integer) amount the player will be fined
- @return reputation hit (Integer) reputation to be deducted relative to fine]]
-local function getBaseReputationFromFine(fine_amount)
-  return math.round(fine_amount / 100)
-end
+--[[ The original has one reputation event for a reported epidemic, and it is
+ worth -2% of the weight. It is applied once, when the epidemic ends badly
+ for the hospital, and it does not scale with the size of the fine.]]
 
 --[[ When the player chooses to declare the epidemic instead of trying
  to cover up it from the initial faxes - ends the epidemic immediately
@@ -372,10 +373,9 @@ end
 function Epidemic:resolveDeclaration()
   self:clearAllInfectedPatients()
 
-  --No fax for declaration just apply fines and rep hit
+  --No fax for declaration just apply fine and rep hit
   self.hospital:spendMoney(self.declare_fine, _S.transactions.epidemy_fine)
-  local reputation_hit = getBaseReputationFromFine(self.declare_fine)
-  self.hospital.reputation = self.hospital.reputation - reputation_hit
+  self.hospital:reputationEvent(ReputationAccount.event_epidemic)
   self.hospital.epidemic = nil
 end
 
@@ -468,6 +468,9 @@ function Epidemic:determineFaxAndFines(still_infected)
       choices = {close_option}
     }
   elseif still_infected >= self.reputation_loss_minimum and still_infected < self.evacuation_minimum then
+    -- A serious failure. The original penalises this outcome and the next one,
+    -- but not a minor failure, so the flag is what decides.
+    self.inspector_failure = true
     self.cover_up_result_fax = {
       {text = fail_text_1},
       {text = fail_text_2},
@@ -475,6 +478,7 @@ function Epidemic:determineFaxAndFines(still_infected)
       choices = {close_option}
     }
   else
+    self.inspector_failure = true
     self.will_be_evacuated = true
     self.cover_up_result_fax = {
       {text = fail_text_1},
@@ -491,14 +495,16 @@ function Epidemic:applyOutcome()
   -- If there is no compensation to apply the epidemic has been failed
   if self.compensation == 0 then
     if self.will_be_evacuated then
-      self.reputation_hit = math.round(self.hospital.reputation * (1/3))
       self:evacuateHospital()
-    else
-      self.reputation_hit = getBaseReputationFromFine(self.coverup_fine)
     end
     -- Apply fine and reputation hit
     self.hospital:spendMoney(self.coverup_fine,_S.transactions.epidemy_coverup_fine)
-    self.hospital.reputation = self.hospital.reputation - self.reputation_hit
+    self.hospital:reputationEvent(ReputationAccount.event_epidemic)
+    if self.inspector_failure then
+      -- A serious or catastrophic inspector verdict costs reputation on top of
+      -- the fine. A minor failure does not, and neither does being cleared.
+      self.hospital:reputationEvent(ReputationAccount.event_inspection_failed)
+    end
   else
     self.hospital:receiveMoney(self.compensation, _S.transactions.compensation)
   end
