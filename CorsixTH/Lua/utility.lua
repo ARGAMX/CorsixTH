@@ -248,6 +248,12 @@ AnimationEffect.None = 0
 AnimationEffect.Glowing = 1
 AnimationEffect.Jelly = 2
 
+-- Keep in sync with highlight_mode in th_gfx_common.h
+HighlightMode = {}
+HighlightMode.None = 0
+-- Steps down solid, 50%, 75%. This is the default; setHighlight() needs no mode.
+HighlightMode.Fade = 1
+
 -- Predefined colours
 Colours = {}
 Colours.PanelDefault = { -- CorsixTH's default panel colour (pale purple)

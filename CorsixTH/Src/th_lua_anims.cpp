@@ -627,6 +627,41 @@ int l_anim_set_patient_effect(lua_State* L) {
 }
 
 template <typename T>
+int l_anim_set_highlight(lua_State* L) {
+  T* anim = luaT_testuserdata<T>(L);
+  /* Both arguments are optional: setHighlight() on its own applies the default
+     highlight. With only one mode, leaving it out is the normal case rather
+     than a convenience. */
+  const highlight_mode mode =
+      lua_isnoneornil(L, 2)
+          ? highlight_mode::fade
+          : static_cast<highlight_mode>(luaL_checkinteger(L, 2));
+  const lua_Integer duration_ms =
+      lua_isnoneornil(L, 3) ? 0 : luaL_checkinteger(L, 3);
+  if (duration_ms < 0) {
+    return luaL_argerror(L, 3, "highlight duration cannot be negative");
+  }
+  anim->set_highlight(mode, static_cast<uint32_t>(duration_ms));
+  lua_settop(L, 1);
+  return 1;
+}
+
+template <typename T>
+int l_anim_clear_highlight(lua_State* L) {
+  T* anim = luaT_testuserdata<T>(L);
+  anim->clear_highlight();
+  lua_settop(L, 1);
+  return 1;
+}
+
+template <typename T>
+int l_anim_is_highlighted(lua_State* L) {
+  T* anim = luaT_testuserdata<T>(L);
+  lua_pushboolean(L, anim->is_highlighted() && !anim->highlight_expired());
+  return 1;
+}
+
+template <typename T>
 int l_anim_set_scale_factor(lua_State* L) {
   T* anim = luaT_testuserdata<T>(L);
   anim->set_scale_factor(static_cast<int>(luaL_checkinteger(L, 2)));
@@ -752,6 +787,9 @@ void lua_register_anims(const lua_register_state* pState) {
     lcb.add_function(l_anim_tick<animation>, "tick");
     lcb.add_function(l_anim_draw<animation>, "draw", lua_metatable::surface);
     lcb.add_function(l_anim_set_patient_effect, "setPatientEffect");
+    lcb.add_function(l_anim_set_highlight<animation>, "setHighlight");
+    lcb.add_function(l_anim_clear_highlight<animation>, "clearHighlight");
+    lcb.add_function(l_anim_is_highlighted<animation>, "isHighlighted");
   }
 
   // Duplicate AnimMetatable[1,2] to SpriteListMetatable[1,2]

@@ -25,7 +25,7 @@ globals = { -- Globals
             "corsixth", "cth_require",
             "class", "Colours", "compare_tables", "DrawFlags",
             "DrawingLayers", "destrict", "flag_clear", "flag_isset",
-            "flag_set", "flag_toggle", "lfs", "list_to_set",
+            "flag_set", "flag_toggle", "HighlightMode", "lfs", "list_to_set",
             "loadfile_envcall", "loadstring_envcall",
             "pause_gc_and_use_weak_keys", "permanent",
             "rangeMapLookup", "rnc", "strict_declare_global",
