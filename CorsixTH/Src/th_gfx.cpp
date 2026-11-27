@@ -926,7 +926,13 @@ void animation_manager::draw_frame(render_target* pCanvas, size_t iFrame,
     return;
   }
 
-  uint32_t iPassOnFlags = iFlags & (thdf_alt_palette | thdf_nearest);
+  /* The alpha bits were masked out here, so they could not be used on any
+     animation drawn through this path despite being part of the public
+     draw_flags enum. Nothing changes for existing content: every caller that
+     sets them sets both, and both makes animation::draw() return before
+     reaching here. */
+  uint32_t iPassOnFlags = iFlags & (thdf_alt_palette | thdf_nearest |
+                                    thdf_alpha_50 | thdf_alpha_75);
 
   size_t iListIndex = frames[iFrame].list_index;
   for (;; ++iListIndex) {
