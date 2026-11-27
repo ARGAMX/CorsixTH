@@ -926,11 +926,11 @@ void animation_manager::draw_frame(render_target* pCanvas, size_t iFrame,
     return;
   }
 
-  /* The alpha bits were masked out here, so they could not be used on any
+  /* The alpha bits were dropped here, so they could not be used on any
      animation drawn through this path despite being part of the public
      draw_flags enum. Nothing changes for existing content: every caller that
      sets them sets both, and both makes animation::draw() return before
-     reaching here. */
+     reaching here. highlight_mode::fade passes a single bit at a time. */
   uint32_t iPassOnFlags = iFlags & (thdf_alt_palette | thdf_nearest |
                                     thdf_alpha_50 | thdf_alpha_75);
 
@@ -1153,6 +1153,76 @@ void animation_base::remove_from_tile() {
   tile = {-1, -1};
 }
 
+/*! A monotonic millisecond reading for driving highlights.
+
+  Uses the SDL clock: animation_manager::game_ticks advances once per in-game
+  hour and stops while paused, neither of which suits a mouse-tracked highlight.
+ */
+static uint64_t highlight_clock_ms() {
+  return static_cast<uint64_t>(SDL_GetTicks());
+}
+
+void animation_base::set_highlight(highlight_mode mode, uint32_t duration_ms) {
+  highlight = mode;
+  highlight_expiry = 0;
+  /* Early return keeps highlight_expired_at() false for a cleared highlight:
+     without it, set_highlight(none, 0) would leave a non-zero deadline. */
+  if (mode == highlight_mode::none) {
+    return;
+  }
+  if (duration_ms > 0) {
+    // Add to the current reading: re-highlighting restarts the clock rather
+    // than shortening or extending it by accident.
+    highlight_expiry = highlight_clock_ms() + duration_ms;
+  }
+}
+
+bool animation_base::highlight_expired_at(uint64_t now_ms) const {
+  /* Deliberately not also checking the mode: whether a highlight is still
+     running is is_highlighted()'s business; this only asks whether a deadline
+     has passed. Keeping them separate lets a test pin the invariant that
+     clearing also drops the deadline. */
+  return highlight_expiry != 0 && now_ms >= highlight_expiry;
+}
+
+bool animation_base::highlight_expired() const {
+  return highlight_expired_at(highlight_clock_ms());
+}
+
+uint64_t animation_base::highlight_level_at(uint64_t now_ms) const {
+  /* Which step of the current cycle this instant falls on, from 0 (fully
+     drawn) upwards. Each level after that is more faded.
+
+     Divided rather than modulo first, so the phase depends on the clock alone
+     and not on when set_highlight() was called: highlighting something and
+     then pausing holds the current phase instead of resuming mid-blink. */
+  const uint64_t step_ms = highlight_cycle_ms / highlight_level_count;
+  return (now_ms / step_ms) % highlight_level_count;
+}
+
+uint32_t animation_base::get_highlight_flags() const {
+  return get_highlight_flags_at(highlight_clock_ms());
+}
+
+uint32_t animation_base::get_highlight_flags_at(uint64_t now_ms) const {
+  if (highlight == highlight_mode::none || highlight_expired_at(now_ms)) {
+    return 0;
+  }
+  /* One alpha bit per level of the ladder, and no level is ever "do not draw":
+
+     both bits at once gives 50%, not nothing, because render_target::draw()
+     reads them as "if alpha_50 ... else if alpha_75". The "don't draw" rule
+     only ever existed as the early return at the top of animation::draw(). */
+  switch (highlight_level_at(now_ms)) {
+    case 0:
+      return 0;
+    case 1:
+      return static_cast<uint32_t>(thdf_alpha_50);
+    default:
+      return static_cast<uint32_t>(thdf_alpha_75);
+  }
+}
+
 void animation_base::attach_to_tile(const xy_pair& tile_pos, map_tile* node,
                                     int layer) {
   remove_from_tile();
@@ -1207,7 +1277,13 @@ void animation::draw(render_target* canvas, const xy_pair& draw_pos) {
     if (pSounds) pSounds->play_at(sound_to_play, x, y, 0);
     sound_to_play = 0;
   }
+  /* The highlight's flags are folded in here rather than stored in flags,
+   which keeps hit_test() working: it refuses a drawable carrying both alpha
+   bits at once, so a highlight in flags would make a faded sprite impossible
+   to click. Nothing is ever written to flags, so it stays clickable
+   throughout the cycle. */
   if (manager) {
+    const uint32_t draw_flags = flags | get_highlight_flags();
     if (flags & thdf_crop) {
       clip_rect rcNew;
       rcNew.y = 0;
@@ -1215,10 +1291,10 @@ void animation::draw(render_target* canvas, const xy_pair& draw_pos) {
       rcNew.x = x + (crop_column - 1) * 32 * scale_factor;
       rcNew.w = 64 * scale_factor;
       render_target::scoped_clip clip(canvas, &rcNew);
-      manager->draw_frame(canvas, frame_index, layers, x, y, flags,
+      manager->draw_frame(canvas, frame_index, layers, x, y, draw_flags,
                           patient_effect, patient_effect_offset, scale_factor);
     } else
-      manager->draw_frame(canvas, frame_index, layers, x, y, flags,
+      manager->draw_frame(canvas, frame_index, layers, x, y, draw_flags,
                           patient_effect, patient_effect_offset, scale_factor);
   }
 }
