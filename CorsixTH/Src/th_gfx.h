@@ -473,6 +473,41 @@ class animation_base : public drawable {
   const xy_pair& get_pixel_offset() const { return pixel_offset; }
   const xy_pair& get_tile() const { return tile; }
 
+  /*! Highlight this drawable.
+      @param mode How to highlight it. highlight_mode::none removes any
+      highlight.
+      @param duration_ms How long the highlight lasts, in milliseconds, or 0
+      for as long as it is left set. A highlight that runs out switches itself
+      off, so a caller that cannot guarantee it will say so is not left with a
+      sprite stuck flashing.
+   */
+
+  void set_highlight(highlight_mode mode = highlight_mode::fade);
+
+  //! Stop highlighting this drawable.
+  void clear_highlight() { set_highlight(highlight_mode::none); }
+
+  /*! The extra draw flags the highlight asks for at this instant: the opacity
+      of the current step of the ladder.
+
+      Returned separately from get_flags() rather than folded into it, because
+      animation::hit_test() refuses a drawable whose flags carry both alpha bits
+      at once. A highlight stored in flags would make a faded sprite impossible
+      to click; folding these in at draw time leaves flags alone. */
+  uint32_t get_highlight_flags() const;
+
+  //! As get_highlight_flags(), but for a given reading of the clock.
+  uint32_t get_highlight_flags_at(uint64_t now_ms) const;
+
+  /*! Which step of the current cycle this instant falls on, from 0 (fully
+     drawn) upwards. Each level after that is more faded.
+
+      Exposed because get_highlight_flags_at() is a view onto this, and it is
+     the one place the timing is decided.
+      @param now_ms The clock reading to evaluate the highlight at.
+   */
+  uint64_t highlight_level_at(uint64_t now_ms) const;
+
   void set_flags(uint32_t iFlags) { flags = iFlags; }
   void set_tile(const xy_pair& tile_pos) { tile = tile_pos; }
   void set_pixel_offset(int x, int y) {
@@ -502,6 +537,9 @@ class animation_base : public drawable {
    * according to the current game options before calling draw.
    */
   int scale_factor{1};
+
+  //! How this drawable is highlighted, or highlight_mode::none.
+  highlight_mode highlight{highlight_mode::none};
 };
 
 //! The kind of animation.
