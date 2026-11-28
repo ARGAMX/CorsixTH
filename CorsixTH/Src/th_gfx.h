@@ -475,12 +475,7 @@ class animation_base : public drawable {
 
   /*! Highlight this drawable.
       @param mode How to highlight it. highlight_mode::none removes any
-      highlight.
-      @param duration_ms How long the highlight lasts, in milliseconds, or 0
-      for as long as it is left set. A highlight that runs out switches itself
-      off, so a caller that cannot guarantee it will say so is not left with a
-      sprite stuck flashing.
-   */
+      highlight. */
 
   void set_highlight(highlight_mode mode = highlight_mode::fade);
 

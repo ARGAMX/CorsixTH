@@ -48,21 +48,13 @@ enum class animation_effect {
 enum class highlight_mode {
   //! Not highlighted.
   none,
-  /*! Steps down through both alpha transparencies: fully drawn, then 50%, then
-     75%. Three states per cycle, so it reads as a fade rather than a blink.
-
-      Never fully invisible: an earlier version used a do-not-draw step at the
-     top of the ladder, but that was dropped in favour of keeping the sprite on
-     screen at some opacity throughout. A second, two-state mode was also
-     removed: the fade is the intended look. */
+  /*! Steps down through both alpha transparencies: fully drawn, then 75%, then
+      50%. Never fully invisible. Three states per cycle, so it reads as a fade
+      rather than a blink. */
   fade,
 };
 
-/*! How long one full highlight cycle lasts, in milliseconds.
-
-  A preference rather than a measurement: the clip attached to the issue shows
-  no blink to compare against, and the original timing has never been measured
-  precisely. This is the one number most likely to want adjusting. */
+//! How long one full highlight cycle lasts, in milliseconds.
 constexpr uint64_t highlight_cycle_ms = 300;
 
 //! How many distinct visual states one cycle steps through.
