@@ -627,6 +627,22 @@ int l_anim_set_patient_effect(lua_State* L) {
 }
 
 template <typename T>
+int l_anim_set_highlight(lua_State* L) {
+  T* anim = luaT_testuserdata<T>(L);
+  anim->set_highlight();
+  lua_settop(L, 1);
+  return 1;
+}
+
+template <typename T>
+int l_anim_clear_highlight(lua_State* L) {
+  T* anim = luaT_testuserdata<T>(L);
+  anim->clear_highlight();
+  lua_settop(L, 1);
+  return 1;
+}
+
+template <typename T>
 int l_anim_set_scale_factor(lua_State* L) {
   T* anim = luaT_testuserdata<T>(L);
   anim->set_scale_factor(static_cast<int>(luaL_checkinteger(L, 2)));
@@ -752,6 +768,8 @@ void lua_register_anims(const lua_register_state* pState) {
     lcb.add_function(l_anim_tick<animation>, "tick");
     lcb.add_function(l_anim_draw<animation>, "draw", lua_metatable::surface);
     lcb.add_function(l_anim_set_patient_effect, "setPatientEffect");
+    lcb.add_function(l_anim_set_highlight<animation>, "setHighlight");
+    lcb.add_function(l_anim_clear_highlight<animation>, "clearHighlight");
   }
 
   // Duplicate AnimMetatable[1,2] to SpriteListMetatable[1,2]

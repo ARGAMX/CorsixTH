@@ -36,4 +36,28 @@ enum class animation_effect {
   jelly,
 };
 
+/*! How an animation is visually highlighted, for example while a tool points at
+    it.
+
+  This is deliberately separate from animation_effect. That is a single value
+  applied only to patient sprites, and its modes are mutually exclusive by
+  construction, so a highlight could neither reach a bench or a room blueprint
+  nor sit alongside jellyitis or radiation. A highlight is applied to whatever
+  sprite is being drawn and leaves the disease effects alone.
+ */
+enum class highlight_mode {
+  //! Not highlighted.
+  none,
+  /*! Steps down through both alpha transparencies: fully drawn, then 75%, then
+      50%. Never fully invisible. Three states per cycle, so it reads as a fade
+      rather than a blink. */
+  fade,
+};
+
+//! How long one full highlight cycle lasts, in milliseconds.
+constexpr uint64_t highlight_cycle_ms = 300;
+
+//! How many distinct visual states one cycle steps through.
+constexpr size_t highlight_level_count = 3;
+
 #endif

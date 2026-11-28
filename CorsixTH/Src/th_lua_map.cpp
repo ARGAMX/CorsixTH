@@ -257,6 +257,8 @@ int l_map_updateblueprint(lua_State* L) {
   const unsigned short iFloorTileBad = 67 + (thdf_alpha_50 << 8);
   const unsigned int iWallAnimTopCorner = 124;
   const unsigned int iWallAnim = 120;
+  // The palette an invalid blueprint is drawn in. A valid one uses the default.
+  const unsigned short iWallInvalidFlags = thdf_alt_palette;
 
   level_map* pMap = luaT_testuserdata<level_map>(L);
   int iOldX = static_cast<int>(luaL_checkinteger(L, 2)) - 1;
@@ -274,6 +276,10 @@ int l_map_updateblueprint(lua_State* L) {
       luaT_testuserdata<animation_manager>(L, 12, luaT_upvalueindex(1));
   bool entire_invalid = lua_toboolean(L, 13) != 0;
   bool valid = !entire_invalid;
+  // Walls only: draw the wall animations of a room that already exists and
+  // touch nothing else. Used to preview a room under the edit-mode cursor,
+  // where the floor must keep its own appearance.
+  bool walls_only = lua_toboolean(L, 14) != 0;
 
   if (iOldX < 0 || iOldY < 0 || (iOldX + iOldW) > pMap->get_width() ||
       (iOldY + iOldH) > pMap->get_height())
@@ -282,60 +288,74 @@ int l_map_updateblueprint(lua_State* L) {
       (iNewY + iNewH) >= pMap->get_height())
     luaL_argerror(L, 6, "New rectangle is out of bounds");
 
-  // Clear blueprint flag from previous selected floor tiles (copying it to
-  // the passable flag).
-  for (int iY = iOldY; iY < iOldY + iOldH; ++iY) {
-    for (int iX = iOldX; iX < iOldX + iOldW; ++iX) {
-      map_tile* pNode = pMap->get_tile_unchecked(iX, iY);
-      pNode->tile_layers[tile_layer::ui] = 0;
-      pNode->flags.passable |= pNode->flags.passable_if_not_for_blueprint;
-      pNode->flags.passable_if_not_for_blueprint = false;
-    }
-  }
-
-  // Add blueprint flag to new floor tiles.
-  for (int iY = iNewY; iY < iNewY + iNewH; ++iY) {
-    for (int iX = iNewX; iX < iNewX + iNewW; ++iX) {
-      map_tile* pNode = pMap->get_tile_unchecked(iX, iY);
-      if (is_valid(entire_invalid, pNode, pMap, player_id)) {
-        pNode->tile_layers[tile_layer::ui] = iFloorTileGood;
-      } else {
-        pNode->tile_layers[tile_layer::ui] = iFloorTileBad;
-        valid = false;
+  // The floor is skipped entirely for a walls-only preview: clearing the
+  // previous rectangle would erase whatever was on the floor of the room
+  // previewed before this one.
+  if (!walls_only) {
+    // Clear blueprint flag from previous selected floor tiles (copying it to
+    // the passable flag).
+    for (int iY = iOldY; iY < iOldY + iOldH; ++iY) {
+      for (int iX = iOldX; iX < iOldX + iOldW; ++iX) {
+        map_tile* pNode = pMap->get_tile_unchecked(iX, iY);
+        pNode->tile_layers[tile_layer::ui] = 0;
+        pNode->flags.passable |= pNode->flags.passable_if_not_for_blueprint;
+        pNode->flags.passable_if_not_for_blueprint = false;
       }
-      pNode->flags.passable_if_not_for_blueprint = pNode->flags.passable;
+    }
+
+    // Add blueprint flag to new floor tiles.
+    for (int iY = iNewY; iY < iNewY + iNewH; ++iY) {
+      for (int iX = iNewX; iX < iNewX + iNewW; ++iX) {
+        map_tile* pNode = pMap->get_tile_unchecked(iX, iY);
+        if (is_valid(entire_invalid, pNode, pMap, player_id)) {
+          pNode->tile_layers[tile_layer::ui] = iFloorTileGood;
+        } else {
+          pNode->tile_layers[tile_layer::ui] = iFloorTileBad;
+          valid = false;
+        }
+        pNode->flags.passable_if_not_for_blueprint = pNode->flags.passable;
+      }
+    }
+
+    // Set center floor tiles
+    if (iNewW >= 2 && iNewH >= 2) {
+      int iCenterX = iNewX + (iNewW - 2) / 2;
+      int iCenterY = iNewY + (iNewH - 2) / 2;
+
+      map_tile* pNode = pMap->get_tile_unchecked(iCenterX, iCenterY);
+      if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
+        pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 2;
+
+      pNode = pMap->get_tile_unchecked(iCenterX + 1, iCenterY);
+      if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
+        pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 1;
+
+      pNode = pMap->get_tile_unchecked(iCenterX, iCenterY + 1);
+      if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
+        pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 0;
+
+      pNode = pMap->get_tile_unchecked(iCenterX + 1, iCenterY + 1);
+      if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
+        pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 3;
     }
   }
 
-  // Set center floor tiles
-  if (iNewW >= 2 && iNewH >= 2) {
-    int iCenterX = iNewX + (iNewW - 2) / 2;
-    int iCenterY = iNewY + (iNewH - 2) / 2;
+  // Set wall animations. A walls-only preview draws the outline of a room that
+  // already exists, so it must not be treated as obstructed: is_valid rejects
+  // any tile with flags.room set, which every tile of an existing room has,
+  // so without this the preview would use the invalid palette.
+  auto wall_flags = [&](const map_tile* pNode) -> unsigned short {
+    if (walls_only || is_valid(entire_invalid, pNode, pMap, player_id)) {
+      return 0;
+    }
+    return iWallInvalidFlags;
+  };
 
-    map_tile* pNode = pMap->get_tile_unchecked(iCenterX, iCenterY);
-    if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
-      pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 2;
-
-    pNode = pMap->get_tile_unchecked(iCenterX + 1, iCenterY);
-    if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
-      pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 1;
-
-    pNode = pMap->get_tile_unchecked(iCenterX, iCenterY + 1);
-    if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
-      pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 0;
-
-    pNode = pMap->get_tile_unchecked(iCenterX + 1, iCenterY + 1);
-    if (pNode->tile_layers[tile_layer::ui] == iFloorTileGood)
-      pNode->tile_layers[tile_layer::ui] = iFloorTileGoodCenter + 3;
-  }
-
-  // Set wall animations
   int iNextAnim = 1;
   animation* pAnim = l_map_updateblueprint_getnextanim(L, iNextAnim);
   map_tile* pNode = pMap->get_tile_unchecked(iNewX, iNewY);
   pAnim->set_animation(pAnims, iWallAnimTopCorner);
-  pAnim->set_flags(
-      is_valid(entire_invalid, pNode, pMap, player_id) ? 0 : thdf_alt_palette);
+  pAnim->set_flags(wall_flags(pNode));
   pAnim->attach_to_tile({iNewX, iNewY}, pNode, 0);
 
   for (int iX = iNewX; iX < iNewX + iNewW; ++iX) {
@@ -343,18 +363,14 @@ int l_map_updateblueprint(lua_State* L) {
       pAnim = l_map_updateblueprint_getnextanim(L, iNextAnim);
       pNode = pMap->get_tile_unchecked(iX, iNewY);
       pAnim->set_animation(pAnims, iWallAnim);
-      pAnim->set_flags(is_valid(entire_invalid, pNode, pMap, player_id)
-                           ? 0
-                           : thdf_alt_palette);
+      pAnim->set_flags(wall_flags(pNode));
       pAnim->attach_to_tile({iX, iNewY}, pNode, 0);
       pAnim->set_pixel_offset(0, 0);
     }
     pAnim = l_map_updateblueprint_getnextanim(L, iNextAnim);
     pNode = pMap->get_tile_unchecked(iX, iNewY + iNewH - 1);
     pAnim->set_animation(pAnims, iWallAnim);
-    pAnim->set_flags(is_valid(entire_invalid, pNode, pMap, player_id)
-                         ? 0
-                         : thdf_alt_palette);
+    pAnim->set_flags(wall_flags(pNode));
     pNode = pMap->get_tile_unchecked(iX, iNewY + iNewH);
     pAnim->attach_to_tile({iX, iNewY + iNewH}, pNode, 0);
     pAnim->set_pixel_offset(0, -1);
@@ -364,20 +380,14 @@ int l_map_updateblueprint(lua_State* L) {
       pAnim = l_map_updateblueprint_getnextanim(L, iNextAnim);
       pNode = pMap->get_tile_unchecked(iNewX, iY);
       pAnim->set_animation(pAnims, iWallAnim);
-      pAnim->set_flags(thdf_flip_horizontal |
-                       (is_valid(entire_invalid, pNode, pMap, player_id)
-                            ? 0
-                            : thdf_alt_palette));
+      pAnim->set_flags(thdf_flip_horizontal | wall_flags(pNode));
       pAnim->attach_to_tile({iNewX, iY}, pNode, 0);
       pAnim->set_pixel_offset(2, 0);
     }
     pAnim = l_map_updateblueprint_getnextanim(L, iNextAnim);
     pNode = pMap->get_tile_unchecked(iNewX + iNewW - 1, iY);
     pAnim->set_animation(pAnims, iWallAnim);
-    pAnim->set_flags(thdf_flip_horizontal |
-                     (is_valid(entire_invalid, pNode, pMap, player_id)
-                          ? 0
-                          : thdf_alt_palette));
+    pAnim->set_flags(thdf_flip_horizontal | wall_flags(pNode));
     pNode = pMap->get_tile_unchecked(iNewX + iNewW, iY);
     pAnim->attach_to_tile({iNewX + iNewW, iY}, pNode, 0);
     pAnim->set_pixel_offset(2, -1);
